@@ -12,9 +12,13 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 import matplotlib
+import seaborn as sns
+from PIL import Image, ImageTk
+import warnings
+warnings.filterwarnings("ignore")
 
 root = tk.Tk()
-root.geometry("1920x1080")
+root.geometry("1920x1080+3840+0")
 root.attributes("-fullscreen",True)
 
 LARGEFONT = ("Verdana", 35)
@@ -33,6 +37,9 @@ Y = ""
 A = ""
 df_A = ""
 df_W = ""
+df_T = ""
+df_X_s = ""
+df_X_v = ""
 
 class tkinterApp(tk.Frame):
     def __init__(self, *args, **kwargs):
@@ -46,7 +53,7 @@ class tkinterApp(tk.Frame):
 
         self.frames = {}
 
-        for F in (StartPage, Page1, Page2, Page3, Page4, Page5, Page6):
+        for F in (StartPage, Page1, Page2, Page3, Page4, Page5, Page6, Page7):
             frame = F(container, self)
             self.frames[F] = frame
 
@@ -123,20 +130,25 @@ class Page1(tk.Frame):
                                  command=lambda: controller.show_frame(Page3))
         self.button_operative.place(relx=0.5, y=300, anchor="center")
 
-        self.button_sensor_readings = tk.Button(self, text="Sensor Readings", fg="black", bg="lightgray",
+        self.button_operative = tk.Button(self, text="Degradation", fg="black", bg="lightgray",
                                  font=("Verdana", 18), pady=10, width=30,
                                  command=lambda: controller.show_frame(Page4))
-        self.button_sensor_readings.place(relx=0.5, y=400, anchor="center")
+        self.button_operative.place(relx=0.5, y=400, anchor="center")
+
+        self.button_sensor_readings = tk.Button(self, text="Sensor Readings", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=30,
+                                 command=lambda: controller.show_frame(Page5))
+        self.button_sensor_readings.place(relx=0.5, y=500, anchor="center")
 
         self.button_virtual = tk.Button(self, text="Virtual Sensors", fg="black", bg="lightgray",
                                  font=("Verdana", 18), pady=10, width=30,
-                                 command=lambda: controller.show_frame(Page5))
-        self.button_virtual.place(relx=0.5, y=500, anchor="center")
+                                 command=lambda: controller.show_frame(Page6))
+        self.button_virtual.place(relx=0.5, y=600, anchor="center")
 
         self.button_health_state = tk.Button(self, text="Health State", fg="black", bg="lightgray",
                                  font=("Verdana", 18), pady=10, width=30,
-                                 command=lambda: controller.show_frame(Page6))
-        self.button_health_state.place(relx=0.5, y=600, anchor="center")
+                                 command=lambda: controller.show_frame(Page7))
+        self.button_health_state.place(relx=0.5, y=700, anchor="center")
 
     def on_select(self, event):
         if not event.widget.curselection():
@@ -148,8 +160,8 @@ class Page1(tk.Frame):
         self.data_loader(self.selected_file)
 
     def data_loader(self, filename):
-        global W_var, X_s_var, X_v_var, T_var, A_var
-        global W, X_s, X_v, T, Y, A, df_A, df_W
+        global W_var, X_s_var, X_v_var, T_var, A_var, df_X_v
+        global W, X_s, X_v, T, Y, A, df_A, df_W, df_T, df_X_s
 
         with h5py.File(filename, 'r') as hdf:
             # Development set
@@ -191,6 +203,9 @@ class Page1(tk.Frame):
 
         df_A = DataFrame(data=A, columns=A_var)
         df_W = DataFrame(data=W, columns=W_var)
+        df_T = DataFrame(data=T, columns=T_var)
+        df_X_s = DataFrame(data=X_s, columns=X_s_var)
+        df_X_v = DataFrame(data=X_v, columns=X_v_var) 
 
 class Page2(tk.Frame):
     def __init__(self, parent, controller):
@@ -245,7 +260,7 @@ class Page2(tk.Frame):
 
         df.plot(x='Unit # [-]', y='Flight Class # [-]', ax=ax, kind="scatter")
 
-        self.canvas.create_rectangle(1920/2-250,1080/2-200,1920/2+250,1080/2+200, width=7, outline="red")
+        self.canvas.create_rectangle(1920/2-250,1080/2-200,1920/2+250,1080/2+200, width=9, outline="darkred")
 
         canvas = FigureCanvasTkAgg(fig, master=self.canvas)
         canvas.draw()
@@ -254,7 +269,7 @@ class Page2(tk.Frame):
     def get_eof(self):
         text = ""
         for i in np.unique(self.df_A['unit']):
-            text = text +'Unit: ' + str(i) + ' - Number of flight cyles (t_{EOF}): '+ str(len(np.unique(self.df_A.loc[self.df_A['unit'] == i, 'cycle']))) + "\n"
+            text = text +'Unit: ' + str(i) + ' - Number of flight cyles (t_EOF): '+ str(len(np.unique(self.df_A.loc[self.df_A['unit'] == i, 'cycle']))) + "\n"
         self.eof_text.configure(text=text)
 
 
@@ -276,18 +291,35 @@ class Page3(tk.Frame):
                                  command=lambda: controller.show_frame(Page1))
         self.button2.place(x=1860, y=1080*0.85, anchor="ne")
         
-        self.button3 = tk.Button(self, text="Get Flight\nTraces", fg="black", bg="lightgray",
+        self.button3 = tk.Button(self, text="Get Operative\nConditions (w)", fg="black", bg="lightgray",
                                  font=("Verdana", 18), pady=10, width=20,
                                  command=self.get_operative)
         self.button3.place(x=1860, y=25, anchor="ne")
 
-        self.selected_unit = "" 
+        self.plot_fc_button = tk.Button(self, text="Plot Flight Traces", fg="black", bg="lightgray",
+                                     font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                     command=self.plot_ft)
+        self.plot_fc_button.place(x=1860, y=140, anchor="ne")
+
+        self.plot_fe_button = tk.Button(self, text="Plot Flight Envelope", fg="black", bg="lightgray",
+                                        font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                        command=self.plot_fe)
+        self.plot_fe_button.place(x=1860, y=230, anchor="ne")
+
+        self.plot_hist_button = tk.Button(self, text="Plot Histogram\nof\nFlight Conditions", fg="black", bg="lightgray",
+                                        font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                        command=self.plot_hist)
+        self.plot_hist_button.place(x=1860, y=320, anchor="ne")
+
+        self.selected_unit = ""
+        self.df_W_u = ""
+
+        self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
 
 
     def get_operative(self):
         self.df_W = df_W
         self.df_W['unit'] = df_A['unit'].values
-
         self.units = list(np.unique(df_A['unit']))
         self.units_var = tk.StringVar(value = self.units)
         self.unit_list = tk.Listbox(self, height=5, width=25, listvariable=self.units_var, font=("Verdana", 12))
@@ -296,6 +328,9 @@ class Page3(tk.Frame):
         scroll = tk.Scrollbar(self, orient="vertical", command=self.unit_list.yview)
         scroll.place(relx=0.15, rely=0.1, anchor="w", height=100)
         self.unit_list['yscrollcommand'] = scroll.set
+
+        self.plot_fe_button.configure(state="normal")
+        self.plot_hist_button.configure(state="normal")
 
         self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
                                           font=("Verdana", 24), width=13,
@@ -307,16 +342,22 @@ class Page3(tk.Frame):
     def on_select_unit(self, event1):
         if not event1.widget.curselection():
             return
-        index=self.unit_list.curselection()[0]
+        index = self.unit_list.curselection()[0]
         self.selected_unit = self.units[index]
 
     def open_selected(self):
         print(self.selected_unit)
-        #self.plot_df_color_per_unit()
+        self.plot_fc_button.configure(state="normal")
 
-    def plot_df_color_per_unit(self, data, variables, labels, size=7, labelsize=17, option='Time', name=None):
-        """
-        """
+    def plot_ft(self):
+        self.df_W_u = self.df_W.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == 1)]
+        self.df_W_u.reset_index(inplace=True, drop=True)
+        labels = ['Altitude [ft]', 'Mach Number [-]', 'Throttle Resolver Angle [%]',
+                  'Temperature at fan inlet (T2) [°R]']
+        self.plot_df_color_per_unit(self.df_W_u, W_var, labels)
+
+    def plot_df_color_per_unit(self, data, variables, labels, size=10, labelsize=17, option='Time', name=None):
+
         plt.clf()        
         input_dim = len(variables)
         cols = min(np.floor(input_dim**0.5).astype(int),4)
@@ -353,13 +394,96 @@ class Page3(tk.Frame):
                 ax.get_yaxis().set_major_formatter(
                 matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
         plt.legend(leg, loc='best', fontsize=labelsize-2) #lower left
-        plt.tight_layout()  
-        plt.show()
+        plt.tight_layout()
         plt.close()
+
+        self.canvas.coords(self.rect, 1920/2-size*50,1080/2-size*50,1920/2+size*50,1080/2+size*50)
+
+        self.fig_canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        self.fig_canvas.draw()
+        self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+
+    def plot_fe(self):
+        labelsize = 17
+        x = np.array([0.0, 0.2, 0.4, 0.6, 0.8])
+        u = np.array([1.7, 1.7, 4.0, 4.0, 4.0]) * 10000
+        l = np.array([0.0, 0.0, 0.0, 0.0, 1.0]) * 10000
+        fig = plt.figure(figsize=(10,10))
+        plt.fill_between(x, l, u, alpha=0.2)
+        plt.plot(df_W.loc[df_A['Fc'] == 3, 'Mach'], df_W.loc[df_A['Fc'] == 3, 'alt'], '.', alpha=0.9)
+        plt.plot(df_W.loc[df_A['Fc'] == 2, 'Mach'], df_W.loc[df_A['Fc'] == 2, 'alt'], '.', alpha=0.9)
+        plt.plot(df_W.loc[df_A['Fc'] == 1, 'Mach'], df_W.loc[df_A['Fc'] == 1, 'alt'], '.', alpha=0.9)
+        plt.tick_params(axis='x', labelsize=labelsize)
+        plt.tick_params(axis='y', labelsize=labelsize)
+        plt.xlim((0.0, 0.8))
+        plt.ylim((0, 40000))
+        plt.xlabel('Mach Number - [-]', fontsize=labelsize)
+        plt.ylabel('Flight Altitude - [ft]', fontsize=labelsize)
+
+        self.canvas.coords(self.rect, 1920 / 2 - 500, 1080 / 2 - 500, 1920 / 2 + 500, 1080 / 2 + 500)
+
+        self.fig_canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        self.fig_canvas.draw()
+        self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+
+    def plot_kde(self, leg, variables, labels, size, units, df_W, df_A, labelsize=17, name=None):
+        """
+        """
+        plt.clf()
+
+        input_dim = len(variables)
+        cols = min(np.floor(input_dim ** 0.5).astype(int), 4)
+        rows = (np.ceil(input_dim / cols)).astype(int)
+        gs = gridspec.GridSpec(rows, cols)
+
+        color_dic_unit = {'Unit 1': 'C0', 'Unit 2': 'C1', 'Unit 3': 'C2', 'Unit 4': 'C3', 'Unit 5': 'C4',
+                          'Unit 6': 'C5',
+                          'Unit 7': 'C6', 'Unit 8': 'C7', 'Unit 9': 'C8', 'Unit 10': 'C9', 'Unit 11': 'C10',
+                          'Unit 12': 'C11', 'Unit 13': 'C12', 'Unit 14': 'C13', 'Unit 15': 'C14', 'Unit 16': 'C15',
+                          'Unit 17': 'C16', 'Unit 18': 'C17', 'Unit 19': 'C18', 'Unit 20': 'C19'}
+
+        fig = plt.figure(figsize=(size, max(size, rows * 2)))
+
+        for n in range(input_dim):
+            ax = fig.add_subplot(gs[n])
+            for k, elem in enumerate(units):
+                sns.kdeplot(df_W.loc[df_A['unit'] == elem, variables[n]],
+                            color=color_dic_unit[leg[k]], shade=True, gridsize=100)
+                ax.tick_params(axis='x', labelsize=labelsize)
+                ax.tick_params(axis='y', labelsize=labelsize)
+
+            ax.get_xaxis().set_major_formatter(
+                matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
+            plt.xlabel(labels[n], fontsize=labelsize)
+            plt.ylabel('Density [-]', fontsize=labelsize)
+            if n == 0:
+                plt.legend(leg, fontsize=labelsize - 4, loc=0)
+            else:
+                plt.legend(leg, fontsize=labelsize - 4, loc=2)
+        plt.tight_layout()
+        plt.close()
+
+        self.canvas.coords(self.rect, 1920 / 2 - 500, 1080 / 2 - 500, 1920 / 2 + 500, 1080 / 2 + 500)
+
+        self.fig_canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        self.fig_canvas.draw()
+        self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+
+    def plot_hist(self):
+        variables = ['alt', 'Mach', 'TRA', 'T2']
+        labels = ['Altitude [ft]', 'Mach Number [-]', 'Throttle Resolver Angle [%]', 'Temperature at fan inlet [°R]']
+        size = 10
+
+        units = list(np.unique(df_A['unit']))
+        leg = ['Unit ' + str(int(u)) for u in units]
+
+        self.plot_kde(leg, variables, labels, size, units, df_W, df_A, labelsize=19)
+
 
 
 class Page4(tk.Frame):
     def __init__(self, parent, controller):
+        global df_A, df_T, T_var
 
         tk.Frame.__init__(self, parent)
         self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
@@ -374,6 +498,90 @@ class Page4(tk.Frame):
                                  font=("Verdana", 18), pady=10, width=18,
                                  command=lambda: controller.show_frame(Page1))
         self.button2.place(x=1860, y=1080*0.85, anchor="ne")
+
+        self.button3 = tk.Button(self, text="Get Degradation", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20,
+                                 command=self.get_degradation)
+        self.button3.place(x=1860, y=25, anchor="ne")
+
+        self.info_text = tk.Label(self, text="", bg="black", fg="white", font=("Verdana", 12),
+                                  wraplength=350)
+        self.info_text.place(x=20, y=540, anchor="w")
+
+        self.plot_parallel_button = tk.Button(self, text="Plot as Parallel\nCoordinates", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20,
+                                 command=self.plot_parallel_coordinates)
+        self.plot_parallel_button.place(x=1860, y=115, anchor="ne")
+
+        self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
+
+        self.plot_single = tk.Button(self, text="Plot Single Color", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20,
+                                 command=self.plotter_single_color)
+        self.plot_single.place(x=1860, y=230, anchor="ne")
+
+        self.plot_single = tk.Button(self, text="Plot HPT Eff.\nColor Per Unit", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20,
+                                 command=self.plotter_color_per_unit)
+        self.plot_single.place(x=1860, y=320, anchor="ne")
+
+
+    def get_degradation(self):
+        df_T['unit'] = df_A['unit'].values
+        df_T['cycle'] = df_A['cycle'].values
+        self.df_Ts = df_T.drop_duplicates()
+        self.info_text.configure(text=(str(self.df_Ts.describe())))
+
+    def plot_parallel_coordinates(self):
+        import plotly.express as px
+
+        varsel = ['unit', 'HPT_eff_mod', 'LPT_eff_mod', 'LPT_flow_mod']
+        df_Tss = self.df_Ts.loc[:,varsel]
+        fig = px.parallel_coordinates(df_Tss, color="unit", labels={"unit": "Units",
+                                    "HPT_eff_mod": "HPT_eff_mod", "LPT_eff_mod": "LPT_eff_mod",
+                                    "LPT_flow_mod": "LPT_flow_mod", },
+                                    color_continuous_scale=px.colors.diverging.Tealrose,
+                                    color_continuous_midpoint=2)
+        
+        fig.write_image("fig1.png")
+        img = Image.open('fig1.png')
+        self.tkimage = ImageTk.PhotoImage(img)
+        self.image_id = self.canvas.create_image(1920/2, 1080/2, image=self.tkimage)
+
+        self.canvas.coords(self.rect, 1920 / 2 - 350, 1080 / 2 - 250, 1920 / 2 + 350, 1080 / 2 + 250)
+
+    def plot_df_single_color(self, data, variables, labels, size=10, labelsize=17, name=None):
+        plt.clf()        
+        input_dim = len(variables)
+        cols = min(np.floor(input_dim**0.5).astype(int),4)
+        rows = (np.ceil(input_dim / cols)).astype(int)
+        gs   = gridspec.GridSpec(rows, cols)    
+        fig  = plt.figure(figsize=(size,max(size,rows*2))) 
+        
+        for n in range(input_dim):
+            ax = fig.add_subplot(gs[n])
+            ax.plot(data[variables[n]], marker='.', markerfacecolor='none', alpha = 0.7)
+            ax.tick_params(axis='x', labelsize=labelsize)
+            ax.tick_params(axis='y', labelsize=labelsize)
+            plt.ylabel(labels[n], fontsize=labelsize)
+            plt.xlabel('Time [s]', fontsize=labelsize)
+        plt.tight_layout()
+        plt.close()
+
+        self.canvas.coords(self.rect, 1920/2-size*50,1080/2-size*50,1920/2+size*50,1080/2+size*50)
+
+        self.fig_canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        self.fig_canvas.draw()
+        self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+
+    def plotter_single_color(self):
+        if self.image_id > 0:
+            self.canvas.delete(self.image_id)
+        self.plot_df_single_color(df_T,T_var,T_var)
+
+    def plotter_color_per_unit(self):
+        Page3.plot_df_color_per_unit(self, self.df_Ts, ['HPT_eff_mod'],[r'HPT Eff. - $\theta$ [-]'], size=7,  option='cycle')
+        self.canvas.coords(self.rect, 1920 / 2 - 350, 1080 / 2 - 350, 1920 / 2 + 350, 1080 / 2 + 350)
 
 class Page5(tk.Frame):
     def __init__(self, parent, controller):
@@ -392,8 +600,64 @@ class Page5(tk.Frame):
                                  command=lambda: controller.show_frame(Page1))
         self.button2.place(x=1860, y=1080*0.85, anchor="ne")
 
+        self.button3 = tk.Button(self, text="Get Sensor\nReadings (Xs)", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20,
+                                 command=self.get_xs)
+        self.button3.place(x=1860, y=25, anchor="ne")
+
+        self.selected_unit = ""
+        self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
+
+        self.plot_single_unit_button = tk.Button(self, text="Plot\nSingle Unit", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20,
+                                 command=self.plot_single_xs)
+        self.plot_single_unit_button.place(x=1860, y=140, anchor="ne")
+
+        self.plot_single_cycle_button = tk.Button(self, text="Plot for Single\nFlight Cycle", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20,
+                                 command=self.plot_single_fc)
+        self.plot_single_cycle_button.place(x=1860, y=255, anchor="ne")
+
+    def get_xs(self):
+        self.units = list(np.unique(df_A['unit']))
+        self.units_var = tk.StringVar(value = self.units)
+        self.unit_list = tk.Listbox(self, height=5, width=25, listvariable=self.units_var, font=("Verdana", 12))
+        self.unit_list.place(relx=0.15, rely=0.1, anchor="e")
+
+        scroll = tk.Scrollbar(self, orient="vertical", command=self.unit_list.yview)
+        scroll.place(relx=0.15, rely=0.1, anchor="w", height=100)
+        self.unit_list['yscrollcommand'] = scroll.set
+
+        self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_unit.place(relx=0.16, rely=0.2, anchor="e")
+
+        self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
+
+    def on_select_unit(self, event2):
+        if not event2.widget.curselection():
+            return
+        index = self.unit_list.curselection()[0]
+        self.selected_unit = self.units[index]
+
+    def open_selected(self):
+        print(self.selected_unit)
+
+    def plot_single_xs(self):
+        df_X_s_u = df_X_s.loc[df_A.unit == self.selected_unit]
+        df_X_s_u.reset_index(inplace=True, drop=True)
+        labels = X_s_var
+        Page4.plot_df_single_color(self,df_X_s_u, X_s_var, labels)
+
+    def plot_single_fc(self):
+        df_X_s_u_c = df_X_s.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == 1)]
+        df_X_s_u_c.reset_index(inplace=True, drop=True)
+        Page4.plot_df_single_color(self, df_X_s_u_c, X_s_var, X_s_var)
+
 class Page6(tk.Frame):
     def __init__(self, parent, controller):
+        global df_A, df_X_v
 
         tk.Frame.__init__(self, parent)
         self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
@@ -409,39 +673,82 @@ class Page6(tk.Frame):
                                  command=lambda: controller.show_frame(Page1))
         self.button2.place(x=1860, y=1080*0.85, anchor="ne")
 
+        self.button3 = tk.Button(self, text="Get Virtual\nSensors (Xv)", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20,
+                                 command=self.get_xv)
+        self.button3.place(x=1860, y=25, anchor="ne")
+
+        self.plot_xv_button = tk.Button(self, text="Plot Single Unit\nVirtual Sensors", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                 command=self.plot_xv)
+        self.plot_xv_button.place(x=1860, y=140, anchor="ne")
+
+        self.selected_unit = ""
+        self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
+
+    def get_xv(self):
+        self.units = list(np.unique(df_A['unit']))
+        self.units_var = tk.StringVar(value = self.units)
+        self.unit_list = tk.Listbox(self, height=5, width=25, listvariable=self.units_var, font=("Verdana", 12))
+        self.unit_list.place(relx=0.15, rely=0.1, anchor="e")
+
+        scroll = tk.Scrollbar(self, orient="vertical", command=self.unit_list.yview)
+        scroll.place(relx=0.15, rely=0.1, anchor="w", height=100)
+        self.unit_list['yscrollcommand'] = scroll.set
+
+        self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_unit.place(relx=0.16, rely=0.2, anchor="e")
+
+        self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
+
+    def on_select_unit(self, event3):
+        if not event3.widget.curselection():
+            return
+        index = self.unit_list.curselection()[0]
+        self.selected_unit = self.units[index]
+
+    def open_selected(self):
+        print(self.selected_unit)
+        self.plot_xv_button.configure(state="normal")
+
+    def plot_xv(self):
+        df_X_v_u_c = df_X_v.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == 1)]
+        df_X_v_u_c.reset_index(inplace=True, drop=True)
+        Page4.plot_df_single_color(self,df_X_v_u_c, X_v_var, X_v_var)
+
+class Page7(tk.Frame):
+    def __init__(self, parent, controller):
+        global df_A
+
+        tk.Frame.__init__(self, parent)
+        self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
+        self.canvas.pack(fill="both", expand = True)
+
+        button1 = tk.Button(self, text="Exit", fg="white", bg="red", 
+                            font=("Verdana",18), pady=10, width=18,
+                            command=root.destroy)
+        self.button1_canvas = self.canvas.create_window(1860, 1080*0.92, anchor="ne",window=button1)
+
+        self.button2 = tk.Button(self, text="Back to Home", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=18,
+                                 command=lambda: controller.show_frame(Page1))
+        self.button2.place(x=1860, y=1080*0.85, anchor="ne")
+
+        self.hs_plot_button = tk.Button(self, text="Plot Health\nState", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20,
+                                 command=self.plot_hs)
+        self.hs_plot_button.place(x=1860, y=25, anchor="ne")
+
+        self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
+
+    def plot_hs(self):
+        Page3.plot_df_color_per_unit(self, df_A, ['hs'],[r'$h_s$ [-]'], option='cycle', size=8)
+
+
+
 
 if __name__ == "__main__":
     tkinterApp(root).pack()
     root.mainloop()
-
-
-
-
-"""
-import matplotlib
-import numpy as np
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.figure import Figure
-import pandas as pd
-import tkinter as tk
-from tkinter import ttk
-
-root = tk.Tk()
-
-lf = ttk.Labelframe(root, text='Plot Area')
-lf.grid(row=0, column=0, sticky='nwes', padx=3, pady=3)
-
-t = np.arange(0.0,3.0,0.01)
-df = pd.DataFrame({'t':t, 's':np.sin(2*np.pi*t)})
-
-fig = Figure(figsize=(5,4), dpi=100)
-ax = fig.add_subplot(111)
-
-df.plot(x='t', y='s', ax=ax)
-
-canvas = FigureCanvasTkAgg(fig, master=lf)
-canvas.draw()
-canvas.get_tk_widget().grid(row=0, column=0)
-
-root.mainloop()
-"""
