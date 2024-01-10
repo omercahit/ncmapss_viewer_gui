@@ -9,8 +9,9 @@ import pandas as pd
 from pandas import DataFrame
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
-from tkinter import ttk
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
+import matplotlib
 
 root = tk.Tk()
 root.geometry("1920x1080")
@@ -30,6 +31,8 @@ X_v = ""
 T = ""
 Y = ""
 A = ""
+df_A = ""
+df_W = ""
 
 class tkinterApp(tk.Frame):
     def __init__(self, *args, **kwargs):
@@ -67,10 +70,14 @@ class StartPage(tk.Frame):
                             command=root.destroy)
         self.button1_canvas = self.canvas.create_window(1860, 1080*0.92, anchor="ne",window=button1)
 
-        self.button2 = tk.Button(self, text="Başla", fg="black", bg="lightgray",
+        self.button2 = tk.Button(self, text="Start", fg="black", bg="lightgray",
                                  font=("Verdana", 24), padx=30, pady=10,
                                  command=lambda: controller.show_frame(Page1))
-        self.button2.place(relx=0.5, rely=0.5, anchor="center")
+        self.button2.place(relx=0.5, rely=0.7, anchor="center")
+
+        self.header = tk.Label(self, text="Turbofan Engine Degradation\nSimulation", bg="black", fg="darkred",
+                               font=("Verdana", 60))
+        self.header.place(relx=0.5, rely=0.5, anchor="center")
 
 
 class Page1(tk.Frame):
@@ -131,9 +138,9 @@ class Page1(tk.Frame):
                                  command=lambda: controller.show_frame(Page6))
         self.button_health_state.place(relx=0.5, y=600, anchor="center")
 
-        
-
     def on_select(self, event):
+        if not event.widget.curselection():
+            return
         index=self.doclist.curselection()[0]
         self.selected_file = self.docs[index]
 
@@ -142,7 +149,7 @@ class Page1(tk.Frame):
 
     def data_loader(self, filename):
         global W_var, X_s_var, X_v_var, T_var, A_var
-        global W, X_s, X_v, T, Y, A
+        global W, X_s, X_v, T, Y, A, df_A, df_W
 
         with h5py.File(filename, 'r') as hdf:
             # Development set
@@ -182,9 +189,12 @@ class Page1(tk.Frame):
         Y = np.concatenate((Y_dev, Y_test), axis=0) 
         A = np.concatenate((A_dev, A_test), axis=0) 
 
+        df_A = DataFrame(data=A, columns=A_var)
+        df_W = DataFrame(data=W, columns=W_var)
+
 class Page2(tk.Frame):
     def __init__(self, parent, controller):
-        global A, A_var
+        global A, A_var, df_A
 
         tk.Frame.__init__(self, parent)
         self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
@@ -222,7 +232,7 @@ class Page2(tk.Frame):
         self.eof_text.place(x=960, y=800, anchor="n")
 
     def get_A(self):
-        self.df_A = DataFrame(data=A, columns=A_var)
+        self.df_A = df_A
         self.info_text.configure(text=(str(self.df_A.describe())+"\n\nEngine units: "+str(np.unique(self.df_A['unit']))))
         self.draw_button.configure(state="normal")
         self.eof_button.configure(state="normal")
@@ -250,6 +260,7 @@ class Page2(tk.Frame):
 
 class Page3(tk.Frame):
     def __init__(self, parent, controller):
+        global W, W_var, df_W, df_A
 
         tk.Frame.__init__(self, parent)
         self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
@@ -264,6 +275,87 @@ class Page3(tk.Frame):
                                  font=("Verdana", 18), pady=10, width=18,
                                  command=lambda: controller.show_frame(Page1))
         self.button2.place(x=1860, y=1080*0.85, anchor="ne")
+        
+        self.button3 = tk.Button(self, text="Get Flight\nTraces", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20,
+                                 command=self.get_operative)
+        self.button3.place(x=1860, y=25, anchor="ne")
+
+        self.selected_unit = "" 
+
+
+    def get_operative(self):
+        self.df_W = df_W
+        self.df_W['unit'] = df_A['unit'].values
+
+        self.units = list(np.unique(df_A['unit']))
+        self.units_var = tk.StringVar(value = self.units)
+        self.unit_list = tk.Listbox(self, height=5, width=25, listvariable=self.units_var, font=("Verdana", 12))
+        self.unit_list.place(relx=0.15, rely=0.1, anchor="e")
+
+        scroll = tk.Scrollbar(self, orient="vertical", command=self.unit_list.yview)
+        scroll.place(relx=0.15, rely=0.1, anchor="w", height=100)
+        self.unit_list['yscrollcommand'] = scroll.set
+
+        self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_unit.place(relx=0.16, rely=0.2, anchor="e")
+
+        self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
+
+    def on_select_unit(self, event1):
+        if not event1.widget.curselection():
+            return
+        index=self.unit_list.curselection()[0]
+        self.selected_unit = self.units[index]
+
+    def open_selected(self):
+        print(self.selected_unit)
+        #self.plot_df_color_per_unit()
+
+    def plot_df_color_per_unit(self, data, variables, labels, size=7, labelsize=17, option='Time', name=None):
+        """
+        """
+        plt.clf()        
+        input_dim = len(variables)
+        cols = min(np.floor(input_dim**0.5).astype(int),4)
+        rows = (np.ceil(input_dim / cols)).astype(int)
+        gs   = gridspec.GridSpec(rows, cols)
+        leg  = []
+        fig  = plt.figure(figsize=(size,max(size,rows*2)))
+        color_dic_unit = {'Unit 1': 'C0', 'Unit 2': 'C1', 'Unit 3': 'C2', 'Unit 4': 'C3', 'Unit 5': 'C4', 'Unit 6': 'C5',
+                        'Unit 7': 'C6', 'Unit 8': 'C7', 'Unit 9': 'C8', 'Unit 10': 'C9', 'Unit 11': 'C10',
+                        'Unit 12': 'C11', 'Unit 13': 'C12', 'Unit 14': 'C13', 'Unit 15': 'C14', 'Unit 16': 'C15',
+                        'Unit 17': 'C16', 'Unit 18': 'C17', 'Unit 19': 'C18', 'Unit 20': 'C19'} 
+        
+        unit_sel  = np.unique(data['unit'])
+        for n in range(input_dim):
+            ax = fig.add_subplot(gs[n])
+            for j in unit_sel:
+                data_unit = data.loc[data['unit'] == j]
+                if option=='cycle':
+                    time_s = data.loc[data['unit'] == j, 'cycle']
+                    label_x = 'Time [cycle]'
+                else:
+                    time_s = np.arange(len(data_unit))
+                    label_x = 'Time [s]'
+                ax.plot(time_s, data_unit[variables[n]], '-o', color=color_dic_unit['Unit ' + str(int(j))],
+                        alpha=0.7, markersize=5)
+                ax.tick_params(axis='x', labelsize=labelsize)
+                ax.tick_params(axis='y', labelsize=labelsize)
+                leg.append('Unit '+str(int(j)))
+            plt.ylabel(labels[n], fontsize=labelsize)    
+            plt.xlabel(label_x, fontsize=labelsize)
+            ax.get_xaxis().set_major_formatter(
+            matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
+            if n==0:
+                ax.get_yaxis().set_major_formatter(
+                matplotlib.ticker.FuncFormatter(lambda x, p: format(int(x), ',')))
+        plt.legend(leg, loc='best', fontsize=labelsize-2) #lower left
+        plt.tight_layout()  
+        plt.show()
+        plt.close()
 
 
 class Page4(tk.Frame):
