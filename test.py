@@ -16,6 +16,7 @@ import seaborn as sns
 from PIL import Image, ImageTk
 import warnings
 warnings.filterwarnings("ignore")
+pd.DataFrame.iteritems = pd.DataFrame.items
 
 root = tk.Tk()
 root.geometry("1920x1080+3840+0")
@@ -524,6 +525,7 @@ class Page4(tk.Frame):
                                  font=("Verdana", 18), pady=10, width=20,
                                  command=self.plotter_color_per_unit)
         self.plot_single.place(x=1860, y=320, anchor="ne")
+        self.image_id = ""
 
 
     def get_degradation(self):
@@ -575,8 +577,8 @@ class Page4(tk.Frame):
         self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
 
     def plotter_single_color(self):
-        if self.image_id > 0:
-            self.canvas.delete(self.image_id)
+        #if self.image_id > 0:
+        #    self.canvas.delete(self.image_id)
         self.plot_df_single_color(df_T,T_var,T_var)
 
     def plotter_color_per_unit(self):
@@ -609,12 +611,12 @@ class Page5(tk.Frame):
         self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
 
         self.plot_single_unit_button = tk.Button(self, text="Plot\nSingle Unit", fg="black", bg="lightgray",
-                                 font=("Verdana", 18), pady=10, width=20,
+                                 font=("Verdana", 18), pady=10, width=20, state="disabled",
                                  command=self.plot_single_xs)
         self.plot_single_unit_button.place(x=1860, y=140, anchor="ne")
 
         self.plot_single_cycle_button = tk.Button(self, text="Plot for Single\nFlight Cycle", fg="black", bg="lightgray",
-                                 font=("Verdana", 18), pady=10, width=20,
+                                 font=("Verdana", 18), pady=10, width=20, state="disabled",
                                  command=self.plot_single_fc)
         self.plot_single_cycle_button.place(x=1860, y=255, anchor="ne")
 
@@ -643,6 +645,8 @@ class Page5(tk.Frame):
 
     def open_selected(self):
         print(self.selected_unit)
+        self.plot_single_unit_button.configure(state="normal")
+        self.plot_single_cycle_button.configure(state="normal")
 
     def plot_single_xs(self):
         df_X_s_u = df_X_s.loc[df_A.unit == self.selected_unit]
