@@ -270,7 +270,7 @@ class Page2(tk.Frame):
     def get_eof(self):
         text = ""
         for i in np.unique(self.df_A['unit']):
-            text = text +'Unit: ' + str(i) + ' - Number of flight cyles (t_EOF): '+ str(len(np.unique(self.df_A.loc[self.df_A['unit'] == i, 'cycle']))) + "\n"
+            text = text +'Unit: ' + str(i) + ' - Number of flight cycles (t_EOF): '+ str(len(np.unique(self.df_A.loc[self.df_A['unit'] == i, 'cycle']))) + "\n"
         self.eof_text.configure(text=text)
 
 
@@ -297,10 +297,10 @@ class Page3(tk.Frame):
                                  command=self.get_operative)
         self.button3.place(x=1860, y=25, anchor="ne")
 
-        self.plot_fc_button = tk.Button(self, text="Plot Flight Traces", fg="black", bg="lightgray",
+        self.plot_ft_button = tk.Button(self, text="Plot Flight Traces", fg="black", bg="lightgray",
                                      font=("Verdana", 18), pady=10, width=20, state="disabled",
                                      command=self.plot_ft)
-        self.plot_fc_button.place(x=1860, y=140, anchor="ne")
+        self.plot_ft_button.place(x=1860, y=140, anchor="ne")
 
         self.plot_fe_button = tk.Button(self, text="Plot Flight Envelope", fg="black", bg="lightgray",
                                         font=("Verdana", 18), pady=10, width=20, state="disabled",
@@ -313,6 +313,7 @@ class Page3(tk.Frame):
         self.plot_hist_button.place(x=1860, y=320, anchor="ne")
 
         self.selected_unit = ""
+        self.selected_cycle = ""
         self.df_W_u = ""
 
         self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
@@ -322,6 +323,7 @@ class Page3(tk.Frame):
         self.df_W = df_W
         self.df_W['unit'] = df_A['unit'].values
         self.units = list(np.unique(df_A['unit']))
+        self.units = [int(x) for x in self.units]
         self.units_var = tk.StringVar(value = self.units)
         self.unit_list = tk.Listbox(self, height=5, width=25, listvariable=self.units_var, font=("Verdana", 12))
         self.unit_list.place(relx=0.15, rely=0.1, anchor="e")
@@ -329,6 +331,16 @@ class Page3(tk.Frame):
         scroll = tk.Scrollbar(self, orient="vertical", command=self.unit_list.yview)
         scroll.place(relx=0.15, rely=0.1, anchor="w", height=100)
         self.unit_list['yscrollcommand'] = scroll.set
+
+        self.cycles = list(np.unique(df_A['cycle']))
+        self.cycles = [int(x) for x in self.cycles]
+        self.cycles_var = tk.StringVar(value = self.cycles)
+        self.cycles_list = tk.Listbox(self, height=9, width=25, listvariable=self.cycles_var, font=("Verdana", 12))
+        self.cycles_list.place(relx=0.15, rely=0.35, anchor="e")
+
+        scroll2 = tk.Scrollbar(self, orient="vertical", command=self.cycles_list.yview)
+        scroll2.place(relx=0.15, rely=0.35, anchor="w", height=180)
+        self.cycles_list['yscrollcommand'] = scroll2.set
 
         self.plot_fe_button.configure(state="normal")
         self.plot_hist_button.configure(state="normal")
@@ -338,7 +350,13 @@ class Page3(tk.Frame):
                                           command=self.open_selected)
         self.choose_unit.place(relx=0.16, rely=0.2, anchor="e")
 
+        self.choose_cycle = tk.Button(self, text="Choose Cycle",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_cycle.place(relx=0.16, rely=0.48, anchor="e")
+
         self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
+        self.cycles_list.bind('<<ListboxSelect>>', self.on_select_cycle)
 
     def on_select_unit(self, event1):
         if not event1.widget.curselection():
@@ -346,12 +364,18 @@ class Page3(tk.Frame):
         index = self.unit_list.curselection()[0]
         self.selected_unit = self.units[index]
 
+    def on_select_cycle(self, event4):
+        if not event4.widget.curselection():
+            return
+        index = self.cycles_list.curselection()[0]
+        self.selected_cycle = self.cycles[index]
+
     def open_selected(self):
         print(self.selected_unit)
-        self.plot_fc_button.configure(state="normal")
+        self.plot_ft_button.configure(state="normal")
 
     def plot_ft(self):
-        self.df_W_u = self.df_W.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == 1)]
+        self.df_W_u = self.df_W.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
         self.df_W_u.reset_index(inplace=True, drop=True)
         labels = ['Altitude [ft]', 'Mach Number [-]', 'Throttle Resolver Angle [%]',
                   'Temperature at fan inlet (T2) [°R]']
