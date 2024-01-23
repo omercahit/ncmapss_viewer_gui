@@ -74,7 +74,7 @@ class StartPage(tk.Frame):
         self.canvas.pack(fill="both", expand = True)
 
         button1 = tk.Button(self, text="Exit", fg="white", bg="red", 
-                            font=("Verdana",18), pady=10, width=18,
+                            font=("Verdana",18), pady=10, width=20,
                             command=root.destroy)
         self.button1_canvas = self.canvas.create_window(1860, 1080*0.92, anchor="ne",window=button1)
 
@@ -95,7 +95,7 @@ class Page1(tk.Frame):
         self.canvas.pack(fill="both", expand = True)
         
         button1 = tk.Button(self, text="Exit", fg="white", bg="red", 
-                            font=("Verdana",18), pady=10, width=18,
+                            font=("Verdana",18), pady=10, width=20,
                             command=root.destroy)
         self.button1_canvas = self.canvas.create_window(1860, 1080*0.92, anchor="ne",window=button1)
 
@@ -217,12 +217,12 @@ class Page2(tk.Frame):
         self.canvas.pack(fill="both", expand = True)
 
         button1 = tk.Button(self, text="Exit", fg="white", bg="red", 
-                            font=("Verdana",18), pady=10, width=18,
+                            font=("Verdana",18), pady=10, width=20,
                             command=root.destroy)
         self.button1_canvas = self.canvas.create_window(1860, 1080*0.92, anchor="ne",window=button1)
 
         self.button2 = tk.Button(self, text="Back to Home", fg="black", bg="lightgray",
-                                 font=("Verdana", 18), pady=10, width=18,
+                                 font=("Verdana", 18), pady=10, width=20,
                                  command=lambda: controller.show_frame(Page1))
         self.button2.place(x=1860, y=1080*0.85, anchor="ne")
 
@@ -283,12 +283,12 @@ class Page3(tk.Frame):
         self.canvas.pack(fill="both", expand = True)
 
         button1 = tk.Button(self, text="Exit", fg="white", bg="red", 
-                            font=("Verdana",18), pady=10, width=18,
+                            font=("Verdana",18), pady=10, width=20,
                             command=root.destroy)
         self.button1_canvas = self.canvas.create_window(1860, 1080*0.92, anchor="ne",window=button1)
 
         self.button2 = tk.Button(self, text="Back to Home", fg="black", bg="lightgray",
-                                 font=("Verdana", 18), pady=10, width=18,
+                                 font=("Verdana", 18), pady=10, width=20,
                                  command=lambda: controller.show_frame(Page1))
         self.button2.place(x=1860, y=1080*0.85, anchor="ne")
         
@@ -311,6 +311,11 @@ class Page3(tk.Frame):
                                         font=("Verdana", 18), pady=10, width=20, state="disabled",
                                         command=self.plot_hist)
         self.plot_hist_button.place(x=1860, y=320, anchor="ne")
+
+        self.hist_unit_button = tk.Button(self, text="Histogram\nof\nSelected Unit", fg="black", bg="lightgray",
+                                        font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                        command=self.plot_hist_unit)
+        self.hist_unit_button.place(x=1860, y=460, anchor="ne")
 
         self.selected_unit = ""
         self.selected_cycle = ""
@@ -344,6 +349,7 @@ class Page3(tk.Frame):
 
         self.plot_fe_button.configure(state="normal")
         self.plot_hist_button.configure(state="normal")
+        self.hist_unit_button.configure(state="normal")
 
         self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
                                           font=("Verdana", 24), width=13,
@@ -500,6 +506,17 @@ class Page3(tk.Frame):
         size = 10
 
         units = list(np.unique(df_A['unit']))
+        print(type(units[0]))
+        leg = ['Unit ' + str(int(u)) for u in units]
+
+        self.plot_kde(leg, variables, labels, size, units, df_W, df_A, labelsize=19)
+
+    def plot_hist_unit(self):
+        variables = ['alt', 'Mach', 'TRA', 'T2']
+        labels = ['Altitude [ft]', 'Mach Number [-]', 'Throttle Resolver Angle [%]', 'Temperature at fan inlet [°R]']
+        size = 10
+
+        units = [float(self.selected_unit)]
         leg = ['Unit ' + str(int(u)) for u in units]
 
         self.plot_kde(leg, variables, labels, size, units, df_W, df_A, labelsize=19)
@@ -515,12 +532,12 @@ class Page4(tk.Frame):
         self.canvas.pack(fill="both", expand = True)
 
         button1 = tk.Button(self, text="Exit", fg="white", bg="red", 
-                            font=("Verdana",18), pady=10, width=18,
+                            font=("Verdana",18), pady=10, width=20,
                             command=root.destroy)
         self.button1_canvas = self.canvas.create_window(1860, 1080*0.92, anchor="ne",window=button1)
 
         self.button2 = tk.Button(self, text="Back to Home", fg="black", bg="lightgray",
-                                 font=("Verdana", 18), pady=10, width=18,
+                                 font=("Verdana", 18), pady=10, width=20,
                                  command=lambda: controller.show_frame(Page1))
         self.button2.place(x=1860, y=1080*0.85, anchor="ne")
 
@@ -545,10 +562,10 @@ class Page4(tk.Frame):
                                  command=self.plotter_single_color)
         self.plot_single.place(x=1860, y=230, anchor="ne")
 
-        self.plot_single = tk.Button(self, text="Plot HPT Eff.\nColor Per Unit", fg="black", bg="lightgray",
+        self.plot_hpt = tk.Button(self, text="Plot HPT Eff.\nColor Per Unit", fg="black", bg="lightgray",
                                  font=("Verdana", 18), pady=10, width=20,
                                  command=self.plotter_color_per_unit)
-        self.plot_single.place(x=1860, y=320, anchor="ne")
+        self.plot_hpt.place(x=1860, y=320, anchor="ne")
         self.image_id = ""
 
 
@@ -574,7 +591,8 @@ class Page4(tk.Frame):
         self.tkimage = ImageTk.PhotoImage(img)
         self.image_id = self.canvas.create_image(1920/2, 1080/2, image=self.tkimage)
 
-        self.canvas.coords(self.rect, 1920 / 2 - 350, 1080 / 2 - 250, 1920 / 2 + 350, 1080 / 2 + 250)
+        self.canvas.coords(self.rect, 1920 / 2 - 500, 1080 / 2 - 500, 1920 / 2 + 500, 1080 / 2 + 500)
+        self.canvas.itemconfig(self.rect, fill="white")
 
     def plot_df_single_color(self, data, variables, labels, size=10, labelsize=17, name=None):
         plt.clf()        
@@ -601,13 +619,11 @@ class Page4(tk.Frame):
         self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
 
     def plotter_single_color(self):
-        #if self.image_id > 0:
-        #    self.canvas.delete(self.image_id)
         self.plot_df_single_color(df_T,T_var,T_var)
 
     def plotter_color_per_unit(self):
-        Page3.plot_df_color_per_unit(self, self.df_Ts, ['HPT_eff_mod'],[r'HPT Eff. - $\theta$ [-]'], size=7,  option='cycle')
-        self.canvas.coords(self.rect, 1920 / 2 - 350, 1080 / 2 - 350, 1920 / 2 + 350, 1080 / 2 + 350)
+        Page3.plot_df_color_per_unit(self, self.df_Ts, ['HPT_eff_mod'],[r'HPT Eff. - $\theta$ [-]'], size=10,  option='cycle')
+        self.canvas.coords(self.rect, 1920/2-10*50,1080/2-10*50,1920/2+10*50,1080/2+10*50)
 
 class Page5(tk.Frame):
     def __init__(self, parent, controller):
@@ -617,12 +633,12 @@ class Page5(tk.Frame):
         self.canvas.pack(fill="both", expand = True)
 
         button1 = tk.Button(self, text="Exit", fg="white", bg="red", 
-                            font=("Verdana",18), pady=10, width=18,
+                            font=("Verdana",18), pady=10, width=20,
                             command=root.destroy)
         self.button1_canvas = self.canvas.create_window(1860, 1080*0.92, anchor="ne",window=button1)
 
         self.button2 = tk.Button(self, text="Back to Home", fg="black", bg="lightgray",
-                                 font=("Verdana", 18), pady=10, width=18,
+                                 font=("Verdana", 18), pady=10, width=20,
                                  command=lambda: controller.show_frame(Page1))
         self.button2.place(x=1860, y=1080*0.85, anchor="ne")
 
@@ -632,6 +648,8 @@ class Page5(tk.Frame):
         self.button3.place(x=1860, y=25, anchor="ne")
 
         self.selected_unit = ""
+        self.selected_cycle = ""
+
         self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
 
         self.plot_single_unit_button = tk.Button(self, text="Plot\nSingle Unit", fg="black", bg="lightgray",
@@ -644,6 +662,11 @@ class Page5(tk.Frame):
                                  command=self.plot_single_fc)
         self.plot_single_cycle_button.place(x=1860, y=255, anchor="ne")
 
+        self.get_correlations_button = tk.Button(self, text="Get Correlations", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                 command=self.get_corr)
+        self.get_correlations_button.place(x=1860, y=370, anchor="ne")
+
     def get_xs(self):
         self.units = list(np.unique(df_A['unit']))
         self.units_var = tk.StringVar(value = self.units)
@@ -654,12 +677,28 @@ class Page5(tk.Frame):
         scroll.place(relx=0.15, rely=0.1, anchor="w", height=100)
         self.unit_list['yscrollcommand'] = scroll.set
 
+        self.cycles = list(np.unique(df_A['cycle']))
+        self.cycles = [int(x) for x in self.cycles]
+        self.cycles_var = tk.StringVar(value = self.cycles)
+        self.cycles_list = tk.Listbox(self, height=9, width=25, listvariable=self.cycles_var, font=("Verdana", 12))
+        self.cycles_list.place(relx=0.15, rely=0.35, anchor="e")
+
+        scroll2 = tk.Scrollbar(self, orient="vertical", command=self.cycles_list.yview)
+        scroll2.place(relx=0.15, rely=0.35, anchor="w", height=180)
+        self.cycles_list['yscrollcommand'] = scroll2.set
+
         self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
                                           font=("Verdana", 24), width=13,
                                           command=self.open_selected)
         self.choose_unit.place(relx=0.16, rely=0.2, anchor="e")
 
+        self.choose_cycle = tk.Button(self, text="Choose Cycle",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_cycle.place(relx=0.16, rely=0.48, anchor="e")
+
         self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
+        self.cycles_list.bind('<<ListboxSelect>>', self.on_select_cycle)
 
     def on_select_unit(self, event2):
         if not event2.widget.curselection():
@@ -667,10 +706,17 @@ class Page5(tk.Frame):
         index = self.unit_list.curselection()[0]
         self.selected_unit = self.units[index]
 
+    def on_select_cycle(self, event5):
+        if not event5.widget.curselection():
+            return
+        index = self.cycles_list.curselection()[0]
+        self.selected_cycle = self.cycles[index]
+
     def open_selected(self):
         print(self.selected_unit)
         self.plot_single_unit_button.configure(state="normal")
         self.plot_single_cycle_button.configure(state="normal")
+        self.get_correlations_button.configure(state="normal")
 
     def plot_single_xs(self):
         df_X_s_u = df_X_s.loc[df_A.unit == self.selected_unit]
@@ -679,9 +725,50 @@ class Page5(tk.Frame):
         Page4.plot_df_single_color(self,df_X_s_u, X_s_var, labels)
 
     def plot_single_fc(self):
-        df_X_s_u_c = df_X_s.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == 1)]
+        df_X_s_u_c = df_X_s.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
         df_X_s_u_c.reset_index(inplace=True, drop=True)
         Page4.plot_df_single_color(self, df_X_s_u_c, X_s_var, X_s_var)
+
+    def get_corr(self):
+        correlation_matrix = df_X_s.corr(method='pearson')
+
+        strongly_correlated_pairs = set()
+
+        for i in range(len(correlation_matrix.columns)):
+            for j in range(i + 1, len(correlation_matrix.columns)):
+                variable1 = correlation_matrix.columns[i]
+                variable2 = correlation_matrix.columns[j]
+                correlation_value = correlation_matrix.iloc[i, j]
+
+                if abs(correlation_value) >= 0.7:
+                    strongly_correlated_pairs.add((variable1, variable2, correlation_value))
+
+        text = ("Strongly Correlated Pairs:")
+        for pair in strongly_correlated_pairs:
+            text = text + "\n" + str(pair[0]) + " and " + str(pair[1]) + " : " + str(pair[2])
+        #text = tk.StringVar(value = text)
+
+        from tkinter import scrolledtext
+
+        self.corr_text = scrolledtext.ScrolledText(self, width=35, font=("Verdana",15),
+                                  bg="lightgray", fg="green", highlightbackground="red",
+                                  highlightthickness=2)
+        self.corr_text.insert(tk.END, text)
+        self.corr_text.place(relx=0.17, rely=0.5, anchor="ne")
+        #self.scroll_corr = tk.Scrollbar(self, orient='vertical', command=self.corr_text.xview)
+        #self.corr_text.configure(xscrollcommand = self.scroll_corr.set)
+        #self.scroll_corr.place(relx=0.17, rely=0.5, anchor="nw")
+
+        fig = plt.figure(figsize=(10,10))
+        sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f")
+        plt.title("Correlation Matrix")
+        plt.close()
+
+        self.canvas.coords(self.rect, 1920 / 2 - 500, 1080 / 2 - 500, 1920 / 2 + 500, 1080 / 2 + 500)
+
+        self.fig_canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        self.fig_canvas.draw()
+        self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
 
 class Page6(tk.Frame):
     def __init__(self, parent, controller):
@@ -692,12 +779,12 @@ class Page6(tk.Frame):
         self.canvas.pack(fill="both", expand = True)
 
         button1 = tk.Button(self, text="Exit", fg="white", bg="red", 
-                            font=("Verdana",18), pady=10, width=18,
+                            font=("Verdana",18), pady=10, width=20,
                             command=root.destroy)
         self.button1_canvas = self.canvas.create_window(1860, 1080*0.92, anchor="ne",window=button1)
 
         self.button2 = tk.Button(self, text="Back to Home", fg="black", bg="lightgray",
-                                 font=("Verdana", 18), pady=10, width=18,
+                                 font=("Verdana", 18), pady=10, width=20,
                                  command=lambda: controller.show_frame(Page1))
         self.button2.place(x=1860, y=1080*0.85, anchor="ne")
 
@@ -711,8 +798,20 @@ class Page6(tk.Frame):
                                  command=self.plot_xv)
         self.plot_xv_button.place(x=1860, y=140, anchor="ne")
 
+        self.plot_xv_single_button = tk.Button(self, text="Plot Single Unit and\nCycle Virtual Sensors", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                 command=self.plot_xv_single)
+        self.plot_xv_single_button.place(x=1860, y=255, anchor="ne")
+
         self.selected_unit = ""
+        self.selected_cycle = ""
+
         self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
+
+        self.get_correlations_button = tk.Button(self, text="Get Correlations", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                 command=self.plot_xv_single)
+        self.get_correlations_button.place(x=1860, y=370, anchor="ne")
 
     def get_xv(self):
         self.units = list(np.unique(df_A['unit']))
@@ -724,12 +823,28 @@ class Page6(tk.Frame):
         scroll.place(relx=0.15, rely=0.1, anchor="w", height=100)
         self.unit_list['yscrollcommand'] = scroll.set
 
+        self.cycles = list(np.unique(df_A['cycle']))
+        self.cycles = [int(x) for x in self.cycles]
+        self.cycles_var = tk.StringVar(value = self.cycles)
+        self.cycles_list = tk.Listbox(self, height=9, width=25, listvariable=self.cycles_var, font=("Verdana", 12))
+        self.cycles_list.place(relx=0.15, rely=0.35, anchor="e")
+
+        scroll2 = tk.Scrollbar(self, orient="vertical", command=self.cycles_list.yview)
+        scroll2.place(relx=0.15, rely=0.35, anchor="w", height=180)
+        self.cycles_list['yscrollcommand'] = scroll2.set
+
         self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
                                           font=("Verdana", 24), width=13,
                                           command=self.open_selected)
         self.choose_unit.place(relx=0.16, rely=0.2, anchor="e")
 
+        self.choose_cycle = tk.Button(self, text="Choose Cycle",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_cycle.place(relx=0.16, rely=0.48, anchor="e")
+
         self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
+        self.cycles_list.bind('<<ListboxSelect>>', self.on_select_cycle)
 
     def on_select_unit(self, event3):
         if not event3.widget.curselection():
@@ -737,12 +852,24 @@ class Page6(tk.Frame):
         index = self.unit_list.curselection()[0]
         self.selected_unit = self.units[index]
 
+    def on_select_cycle(self, event6):
+        if not event6.widget.curselection():
+            return
+        index = self.cycles_list.curselection()[0]
+        self.selected_cycle = self.cycles[index]
+
     def open_selected(self):
         print(self.selected_unit)
         self.plot_xv_button.configure(state="normal")
+        self.plot_xv_single_button.configure(state="normal")
 
     def plot_xv(self):
         df_X_v_u_c = df_X_v.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == 1)]
+        df_X_v_u_c.reset_index(inplace=True, drop=True)
+        Page4.plot_df_single_color(self,df_X_v_u_c, X_v_var, X_v_var)
+
+    def plot_xv_single(self):
+        df_X_v_u_c = df_X_v.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
         df_X_v_u_c.reset_index(inplace=True, drop=True)
         Page4.plot_df_single_color(self,df_X_v_u_c, X_v_var, X_v_var)
 
