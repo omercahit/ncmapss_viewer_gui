@@ -15,6 +15,11 @@ import matplotlib
 import seaborn as sns
 from PIL import Image, ImageTk
 from tkinter import scrolledtext
+import optuna
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score
+from sklearn import preprocessing
 import warnings
 warnings.filterwarnings("ignore")
 pd.DataFrame.iteritems = pd.DataFrame.items
@@ -42,6 +47,7 @@ df_W = ""
 df_T = ""
 df_X_s = ""
 df_X_v = ""
+df_Y = ""
 
 class tkinterApp(tk.Frame):
     def __init__(self, *args, **kwargs):
@@ -55,7 +61,7 @@ class tkinterApp(tk.Frame):
 
         self.frames = {}
 
-        for F in (StartPage, Page1, Page2, Page3, Page4, Page5, Page6, Page7):
+        for F in (StartPage, Page1, Page2, Page3, Page4, Page5, Page6, Page7, Page8):
             frame = F(container, self)
             self.frames[F] = frame
 
@@ -152,6 +158,11 @@ class Page1(tk.Frame):
                                  command=lambda: controller.show_frame(Page7))
         self.button_health_state.place(relx=0.5, y=700, anchor="center")
 
+        self.button_pred = tk.Button(self, text="Train and Predict", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=30,
+                                 command=lambda: controller.show_frame(Page8))
+        self.button_pred.place(relx=0.5, y=800, anchor="center")
+
     def on_select(self, event):
         if not event.widget.curselection():
             return
@@ -162,7 +173,7 @@ class Page1(tk.Frame):
         self.data_loader(self.selected_file)
 
     def data_loader(self, filename):
-        global W_var, X_s_var, X_v_var, T_var, A_var, df_X_v
+        global W_var, X_s_var, X_v_var, T_var, A_var, df_X_v, df_Y
         global W, X_s, X_v, T, Y, A, df_A, df_W, df_T, df_X_s
 
         with h5py.File(filename, 'r') as hdf:
@@ -208,12 +219,14 @@ class Page1(tk.Frame):
         df_T = DataFrame(data=T, columns=T_var)
         df_X_s = DataFrame(data=X_s, columns=X_s_var)
         df_X_v = DataFrame(data=X_v, columns=X_v_var)
+        df_Y = DataFrame(data=Y, columns=['RUL'])
 
         df_W['unit'] = df_A['unit'].values
 
 class Page2(tk.Frame):
     def __init__(self, parent, controller):
-        global A, A_var, df_A
+        global W_var, X_s_var, X_v_var, T_var, A_var, df_X_v, df_Y
+        global W, X_s, X_v, T, Y, A, df_A, df_W, df_T, df_X_s
 
         tk.Frame.__init__(self, parent)
         self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
@@ -278,7 +291,8 @@ class Page2(tk.Frame):
 
 class Page3(tk.Frame):
     def __init__(self, parent, controller):
-        global W, W_var, df_W, df_A
+        global W_var, X_s_var, X_v_var, T_var, A_var, df_X_v, df_Y
+        global W, X_s, X_v, T, Y, A, df_A, df_W, df_T, df_X_s
 
         tk.Frame.__init__(self, parent)
         self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
@@ -324,9 +338,23 @@ class Page3(tk.Frame):
                                         command=self.plot_ft_single)
         self.sing_cond_button.place(x=1860, y=600, anchor="ne")
 
+        self.get_corr_button = tk.Button(self, text="Get Correlation", fg="black", bg="lightgray",
+                                        font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                        command=self.get_corr)
+        self.get_corr_button.place(x=1860, y=715, anchor="ne")
+
+        self.scatter_button = tk.Button(self, text="Scatter Plot\nSelected Sensors", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), width=20, command=self.scatter_plot)
+        self.scatter_button.place(relx=0.18, rely=0.9, anchor="se")
+
+        self.box_plot_button = tk.Button(self, text="Box Plot\nSelected Sensor", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), width=20, command=self.box_plot)
+        self.box_plot_button.place(relx=0.18, rely=0.98, anchor="se")
+
         self.selected_unit = ""
         self.selected_cycle = ""
         self.selected_condition = ""
+        self.list_to_plot = []
 
         self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
 
@@ -356,6 +384,7 @@ class Page3(tk.Frame):
         self.plot_hist_button.configure(state="normal")
         self.hist_unit_button.configure(state="normal")
         self.sing_cond_button.configure(state="normal")
+        self.get_corr_button.configure(state="normal")
 
         self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
                                           font=("Verdana", 24), width=13,
@@ -403,6 +432,7 @@ class Page3(tk.Frame):
             return
         index = self.conditions_list.curselection()[0]
         self.selected_condition = self.conditions[index]
+        self.list_to_plot.append(self.selected_condition)
 
     def open_selected(self):
         print(self.selected_unit)
@@ -564,11 +594,95 @@ class Page3(tk.Frame):
 
         self.plot_kde(leg, variables, labels, size, units, df_W, df_A, labelsize=19)
 
+    def get_corr(self):
+        correlation_matrix = df_W.corr(method='pearson')
 
+        strongly_correlated_pairs = set()
+
+        for i in range(len(correlation_matrix.columns)):
+            for j in range(i + 1, len(correlation_matrix.columns)):
+                variable1 = correlation_matrix.columns[i]
+                variable2 = correlation_matrix.columns[j]
+                correlation_value = correlation_matrix.iloc[i, j]
+
+                if abs(correlation_value) >= 0.75:
+                    strongly_correlated_pairs.add((variable1, variable2, correlation_value))
+
+        text = ("Strongly Correlated Pairs (>%75):")
+        for pair in strongly_correlated_pairs:
+            text = text + "\n" + str(pair[0]) + " and " + str(pair[1]) + " : " + str(pair[2])
+
+        self.corr_text = scrolledtext.ScrolledText(self, width=39, font=("Verdana",10),
+                                  bg="lightgray", fg="green", highlightbackground="darkred",
+                                  highlightthickness=2,  height=6)
+        self.corr_text.insert(tk.END, text)
+        self.corr_text.place(relx=0.97, rely=0.73, anchor="ne")
+
+        fig = plt.figure(figsize=(10,10))
+        sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f")
+        plt.title("Correlation Matrix")
+        plt.close()
+
+        self.canvas.coords(self.rect, 1920 / 2 - 500, 1080 / 2 - 500, 1920 / 2 + 500, 1080 / 2 + 500)
+
+        self.fig_canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        self.fig_canvas.draw()
+        self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+
+    def scatter_plot(self):
+        plt.clf()
+        df_W_single = df_W[self.list_to_plot[-2]].to_frame()
+        df_W_scatter_1 = df_W_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_W_scatter_1.reset_index(inplace=True, drop=True)
+
+        df_W_single = df_W[self.list_to_plot[-1]].to_frame()
+        df_W_scatter_2 = df_W_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_W_scatter_2.reset_index(inplace=True, drop=True)
+
+        fig = Figure(figsize=(10,10), dpi=100)
+
+        ax=fig.add_subplot(111)
+
+        ax.set_title(self.list_to_plot[-2] + " and " + self.list_to_plot[-1], fontsize="xx-large")
+
+        ax.scatter(x=df_W_scatter_2, y=df_W_scatter_1)
+        plt.close()
+
+        self.canvas.create_rectangle(1920/2-500,1080/2-500,1920/2+500,1080/2+500, width=9, outline="darkred")
+
+        canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        canvas.draw()
+        canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+    
+    def box_plot(self):
+        plt.clf()
+        df_W_single = df_W[self.list_to_plot[-2]].to_frame()
+        df_W_box_1 = df_W_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_W_box_1.reset_index(inplace=True, drop=True)
+
+        df_W_single = df_W[self.list_to_plot[-1]].to_frame()
+        df_W_box_2 = df_W_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_W_box_2.reset_index(inplace=True, drop=True)
+
+        fig = Figure(figsize=(10,10), dpi=100)
+
+        ax=fig.add_subplot(111)
+
+        ax.set_title(self.list_to_plot[-2] + " and " + self.list_to_plot[-1], fontsize="xx-large")
+
+        ax.boxplot(x=[df_W_box_1.values.flatten(), df_W_box_2.values.flatten()])
+        plt.close()
+
+        self.canvas.create_rectangle(1920/2-500,1080/2-500,1920/2+500,1080/2+500, width=9, outline="darkred")
+
+        canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        canvas.draw()
+        canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
 
 class Page4(tk.Frame):
     def __init__(self, parent, controller):
-        global df_A, df_T, T_var
+        global W_var, X_s_var, X_v_var, T_var, A_var, df_X_v, df_Y
+        global W, X_s, X_v, T, Y, A, df_A, df_W, df_T, df_X_s
 
         tk.Frame.__init__(self, parent)
         self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
@@ -611,12 +725,18 @@ class Page4(tk.Frame):
         self.plot_hpt.place(x=1860, y=320, anchor="ne")
         self.image_id = ""
 
+        self.get_corr_button = tk.Button(self, text="Get Correlation", fg="black", bg="lightgray",
+                                        font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                        command=self.get_corr)
+        self.get_corr_button.place(x=1860, y=435, anchor="ne")
+
 
     def get_degradation(self):
         df_T['unit'] = df_A['unit'].values
         df_T['cycle'] = df_A['cycle'].values
         self.df_Ts = df_T.drop_duplicates()
         self.info_text.configure(text=(str(self.df_Ts.describe())))
+        self.get_corr_button.configure(state="normal")
 
     def plot_parallel_coordinates(self):
         import plotly.express as px
@@ -668,8 +788,45 @@ class Page4(tk.Frame):
         Page3.plot_df_color_per_unit(self, self.df_Ts, ['HPT_eff_mod'],[r'HPT Eff. - $\theta$ [-]'], size=10,  option='cycle')
         self.canvas.coords(self.rect, 1920/2-10*50,1080/2-10*50,1920/2+10*50,1080/2+10*50)
 
+    def get_corr(self):
+        correlation_matrix = df_T.corr(method='pearson')
+
+        strongly_correlated_pairs = set()
+
+        for i in range(len(correlation_matrix.columns)):
+            for j in range(i + 1, len(correlation_matrix.columns)):
+                variable1 = correlation_matrix.columns[i]
+                variable2 = correlation_matrix.columns[j]
+                correlation_value = correlation_matrix.iloc[i, j]
+
+                if abs(correlation_value) >= 0.75:
+                    strongly_correlated_pairs.add((variable1, variable2, correlation_value))
+
+        text = ("Strongly Correlated Pairs (>%75):")
+        for pair in strongly_correlated_pairs:
+            text = text + "\n" + str(pair[0]) + " and " + str(pair[1]) + " : " + str(pair[2])
+
+        self.corr_text = scrolledtext.ScrolledText(self, width=39, font=("Verdana",10),
+                                  bg="lightgray", fg="green", highlightbackground="darkred",
+                                  highlightthickness=2,  height=6)
+        self.corr_text.insert(tk.END, text)
+        self.corr_text.place(relx=0.97, rely=0.73, anchor="ne")
+
+        fig = plt.figure(figsize=(10,10))
+        sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f")
+        plt.title("Correlation Matrix")
+        plt.close()
+
+        self.canvas.coords(self.rect, 1920 / 2 - 500, 1080 / 2 - 500, 1920 / 2 + 500, 1080 / 2 + 500)
+
+        self.fig_canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        self.fig_canvas.draw()
+        self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+
 class Page5(tk.Frame):
     def __init__(self, parent, controller):
+        global W_var, X_s_var, X_v_var, T_var, A_var, df_X_v, df_Y
+        global W, X_s, X_v, T, Y, A, df_A, df_W, df_T, df_X_s
 
         tk.Frame.__init__(self, parent)
         self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
@@ -693,6 +850,7 @@ class Page5(tk.Frame):
         self.selected_unit = ""
         self.selected_cycle = ""
         self.selected_sensor = ""
+        self.list_to_plot = []
 
         self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
 
@@ -715,6 +873,14 @@ class Page5(tk.Frame):
                                  font=("Verdana", 18), pady=10, width=20, state="disabled",
                                  command=self.get_corr)
         self.get_correlations_button.place(x=1860, y=485, anchor="ne")
+
+        self.scatter_button = tk.Button(self, text="Scatter Plot\nSelected Sensors", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), width=20, command=self.scatter_plot)
+        self.scatter_button.place(relx=0.18, rely=0.9, anchor="se")
+
+        self.box_plot_button = tk.Button(self, text="Box Plot\nSelected Sensor", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), width=20, command=self.box_plot)
+        self.box_plot_button.place(relx=0.18, rely=0.98, anchor="se")
 
     def get_xs(self):
         self.units = list(np.unique(df_A['unit']))
@@ -783,6 +949,7 @@ class Page5(tk.Frame):
             return
         index = self.sensors_list.curselection()[0]
         self.selected_sensor = self.sensors[index]
+        self.list_to_plot.append(self.selected_sensor)
 
     def open_selected(self):
         print(self.selected_unit)
@@ -826,11 +993,11 @@ class Page5(tk.Frame):
         for pair in strongly_correlated_pairs:
             text = text + "\n" + str(pair[0]) + " and " + str(pair[1]) + " : " + str(pair[2])
 
-        self.corr_text = scrolledtext.ScrolledText(self, width=35, font=("Verdana",10),
+        self.corr_text = scrolledtext.ScrolledText(self, width=40, font=("Verdana",10),
                                   bg="lightgray", fg="green", highlightbackground="darkred",
-                                  highlightthickness=2)
+                                  highlightthickness=2, height=15)
         self.corr_text.insert(tk.END, text)
-        self.corr_text.place(relx=0.97, rely=0.45, anchor="ne")
+        self.corr_text.place(relx=0.97, rely=0.52, anchor="ne")
 
         fig = plt.figure(figsize=(10,10))
         sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f")
@@ -843,9 +1010,60 @@ class Page5(tk.Frame):
         self.fig_canvas.draw()
         self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
 
+    def scatter_plot(self):
+        plt.clf()
+        df_X_s_single = df_X_s[self.list_to_plot[-2]].to_frame()
+        df_X_s_scatter_1 = df_X_s_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_X_s_scatter_1.reset_index(inplace=True, drop=True)
+
+        df_X_s_single = df_X_s[self.list_to_plot[-1]].to_frame()
+        df_X_s_scatter_2 = df_X_s_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_X_s_scatter_2.reset_index(inplace=True, drop=True)
+
+        fig = Figure(figsize=(10,10), dpi=100)
+
+        ax=fig.add_subplot(111)
+
+        ax.set_title(self.list_to_plot[-2] + " and " + self.list_to_plot[-1], fontsize="xx-large")
+
+        ax.scatter(x=df_X_s_scatter_2, y=df_X_s_scatter_1)
+        plt.close()
+
+        self.canvas.create_rectangle(1920/2-500,1080/2-500,1920/2+500,1080/2+500, width=9, outline="darkred")
+
+        canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        canvas.draw()
+        canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+
+    def box_plot(self):
+        plt.clf()
+        df_X_s_single = df_X_s[self.list_to_plot[-2]].to_frame()
+        df_X_s_box_1 = df_X_s_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_X_s_box_1.reset_index(inplace=True, drop=True)
+
+        df_X_s_single = df_X_s[self.list_to_plot[-1]].to_frame()
+        df_X_s_box_2 = df_X_s_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_X_s_box_2.reset_index(inplace=True, drop=True)
+
+        fig = Figure(figsize=(10,10), dpi=100)
+
+        ax=fig.add_subplot(111)
+
+        ax.set_title(self.list_to_plot[-2] + " and " + self.list_to_plot[-1], fontsize="xx-large")
+
+        ax.boxplot(x=[df_X_s_box_1.values.flatten(), df_X_s_box_2.values.flatten()])
+        plt.close()
+
+        self.canvas.create_rectangle(1920/2-500,1080/2-500,1920/2+500,1080/2+500, width=9, outline="darkred")
+
+        canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        canvas.draw()
+        canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+
 class Page6(tk.Frame):
     def __init__(self, parent, controller):
-        global df_A, df_X_v
+        global W_var, X_s_var, X_v_var, T_var, A_var, df_X_v, df_Y
+        global W, X_s, X_v, T, Y, A, df_A, df_W, df_T, df_X_s
 
         tk.Frame.__init__(self, parent)
         self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
@@ -879,6 +1097,7 @@ class Page6(tk.Frame):
         self.selected_unit = ""
         self.selected_cycle = ""
         self.selected_sensor = ""
+        self.list_to_plot = []
 
         self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
 
@@ -891,6 +1110,14 @@ class Page6(tk.Frame):
                                  font=("Verdana", 18), pady=10, width=20, state="disabled",
                                  command=self.get_corr)
         self.get_correlations_button.place(x=1860, y=485, anchor="ne")
+
+        self.scatter_button = tk.Button(self, text="Scatter Plot\nSelected Sensors", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), width=20, command=self.scatter_plot)
+        self.scatter_button.place(relx=0.18, rely=0.9, anchor="se")
+
+        self.box_plot_button = tk.Button(self, text="Box Plot\nSelected Sensor", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), width=20, command=self.box_plot)
+        self.box_plot_button.place(relx=0.18, rely=0.98, anchor="se")
 
     def get_xv(self):
         self.units = list(np.unique(df_A['unit']))
@@ -958,6 +1185,7 @@ class Page6(tk.Frame):
             return
         index = self.sensors_list.curselection()[0]
         self.selected_sensor = self.sensors[index]
+        self.list_to_plot.append(self.selected_sensor)
 
     def open_selected(self):
         print(self.selected_unit)
@@ -1000,11 +1228,11 @@ class Page6(tk.Frame):
         for pair in strongly_correlated_pairs:
             text = text + "\n" + str(pair[0]) + " and " + str(pair[1]) + " : " + str(pair[2])
 
-        self.corr_text = scrolledtext.ScrolledText(self, width=35, font=("Verdana",10),
+        self.corr_text = scrolledtext.ScrolledText(self, width=40, font=("Verdana",10),
                                   bg="lightgray", fg="green", highlightbackground="darkred",
-                                  highlightthickness=2)
+                                  highlightthickness=2,  height=15)
         self.corr_text.insert(tk.END, text)
-        self.corr_text.place(relx=0.97, rely=0.45, anchor="ne")
+        self.corr_text.place(relx=0.97, rely=0.52, anchor="ne")
 
         fig = plt.figure(figsize=(10,10))
         sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f")
@@ -1017,9 +1245,61 @@ class Page6(tk.Frame):
         self.fig_canvas.draw()
         self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
 
+    def scatter_plot(self):
+        plt.clf()
+        df_X_v_single = df_X_v[self.list_to_plot[-2]].to_frame()
+        df_X_v_scatter_1 = df_X_v_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_X_v_scatter_1.reset_index(inplace=True, drop=True)
+
+        df_X_v_single = df_X_v[self.list_to_plot[-1]].to_frame()
+        df_X_v_scatter_2 = df_X_v_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_X_v_scatter_2.reset_index(inplace=True, drop=True)
+
+        fig = Figure(figsize=(10,10), dpi=100)
+
+        ax=fig.add_subplot(111)
+
+        plt.ylabel(self.list_to_plot[-2], fontsize=17)
+        plt.xlabel(self.list_to_plot[-1], fontsize=17)
+
+        ax.scatter(x=df_X_v_scatter_2, y=df_X_v_scatter_1)
+        plt.close()
+
+        self.canvas.create_rectangle(1920/2-500,1080/2-500,1920/2+500,1080/2+500, width=9, outline="darkred")
+
+        canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        canvas.draw()
+        canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+
+    def box_plot(self):
+        plt.clf()
+        df_X_v_single = df_X_v[self.list_to_plot[-2]].to_frame()
+        df_X_v_box_1 = df_X_v_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_X_v_box_1.reset_index(inplace=True, drop=True)
+
+        df_X_v_single = df_X_v[self.list_to_plot[-1]].to_frame()
+        df_X_v_box_2 = df_X_v_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_X_v_box_2.reset_index(inplace=True, drop=True)
+
+        fig = Figure(figsize=(10,10), dpi=100)
+
+        ax=fig.add_subplot(111)
+
+        ax.set_title(self.list_to_plot[-2] + " and " + self.list_to_plot[-1], fontsize="xx-large")
+
+        ax.boxplot(x=[df_X_v_box_1.values.flatten(), df_X_v_box_2.values.flatten()])
+        plt.close()
+
+        self.canvas.create_rectangle(1920/2-500,1080/2-500,1920/2+500,1080/2+500, width=9, outline="darkred")
+
+        canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        canvas.draw()
+        canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
+
 class Page7(tk.Frame):
     def __init__(self, parent, controller):
-        global df_A
+        global W_var, X_s_var, X_v_var, T_var, A_var, df_X_v, df_Y
+        global W, X_s, X_v, T, Y, A, df_A, df_W, df_T, df_X_s
 
         tk.Frame.__init__(self, parent)
         self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
@@ -1045,6 +1325,137 @@ class Page7(tk.Frame):
     def plot_hs(self):
         Page3.plot_df_color_per_unit(self, df_A, ['hs'],[r'$h_s$ [-]'], option='cycle', size=8)
 
+class Page8(tk.Frame):
+    def __init__(self, parent, controller):
+        global W_var, X_s_var, X_v_var, T_var, A_var
+        global W, X_s, X_v, T, Y, A
+
+        tk.Frame.__init__(self, parent)
+        self.canvas = tk.Canvas(self, width = 1920, height = 1080, bg="black", highlightthickness=0)
+        self.canvas.pack(fill="both", expand = True)
+
+        button1 = tk.Button(self, text="Exit", fg="white", bg="red", 
+                            font=("Verdana",18), pady=10, width=18,
+                            command=root.destroy)
+        self.button1_canvas = self.canvas.create_window(1860, 1080*0.92, anchor="ne",window=button1)
+
+        self.button2 = tk.Button(self, text="Back to Home", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=18,
+                                 command=lambda: controller.show_frame(Page1))
+        self.button2.place(x=1860, y=1080*0.85, anchor="ne")
+
+        self.concat = tk.Button(self, text="Get Concat", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=18,
+                                 command=self.get_concat)
+        self.concat.place(x=1860, y=25, anchor="ne")
+
+        self.selected_unit = ""
+        self.selected_feat = ""
+
+        self.run_button = tk.Button(self, text="Train", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=18,
+                                 command=self.train)
+        self.run_button.place(x=1860, y=115, anchor="ne")
+        
+    def get_concat(self):
+        self.df_W = DataFrame(data=W, columns=W_var)
+        self.df_X_s = DataFrame(data=X_s, columns=X_s_var)
+        self.df_X_v = DataFrame(data=X_v, columns=X_v_var)
+        self.df_T = DataFrame(data=T, columns=T_var)
+        self.df_Y = DataFrame(data=Y, columns=['RUL'])
+        self.df_A = DataFrame(data=A, columns=A_var)
+
+        self.df_all = pd.concat([self.df_W, self.df_X_s, self.df_X_v,
+                                 self.df_T, self.df_Y, self.df_A], axis=1)
+
+        self.units = list(np.unique(df_A['unit']))
+        self.units_var = tk.StringVar(value = self.units)
+        self.unit_list = tk.Listbox(self, height=5, width=25, listvariable=self.units_var, font=("Verdana", 12))
+        self.unit_list.place(relx=0.15, rely=0.1, anchor="e")
+
+        scroll = tk.Scrollbar(self, orient="vertical", command=self.unit_list.yview)
+        scroll.place(relx=0.15, rely=0.1, anchor="w", height=100)
+        self.unit_list['yscrollcommand'] = scroll.set
+
+        self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_unit.place(relx=0.16, rely=0.2, anchor="e")
+
+        self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
+
+        self.features = list(self.df_all.columns)
+        self.features_var = tk.StringVar(value = self.features)
+        self.features_list = tk.Listbox(self, height=5, width=25, listvariable=self.features_var, font=("Verdana", 12))
+        self.features_list.place(relx=0.15, rely=0.35, anchor="e")
+
+        scroll2 = tk.Scrollbar(self, orient="vertical", command=self.features_list.yview)
+        scroll2.place(relx=0.15, rely=0.35, anchor="w", height=100)
+        self.features_list['yscrollcommand'] = scroll2.set
+
+        self.choose_feat = tk.Button(self, text="Choose Feature",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_feat.place(relx=0.16, rely=0.48, anchor="e")
+
+        self.features_list.bind('<<ListboxSelect>>', self.on_select_feat)
+
+    def open_selected(self):
+        self.single_unit = self.df_all[self.df_all['unit'] == self.selected_unit]
+        #print(self.single_unit)
+
+
+    def on_select_unit(self, event10):
+        if not event10.widget.curselection():
+            return
+        index = self.unit_list.curselection()[0]
+        self.selected_unit = self.units[index]
+
+    def on_select_feat(self, event11):
+        if not event11.widget.curselection():
+            return
+        index = self.features_list.curselection()[0]
+        self.selected_feat = self.features[index]
+
+    def train(self):
+        self.x = self.single_unit.drop(self.selected_feat, axis=1)
+        self.y = self.single_unit[self.selected_feat].to_frame()
+
+        print(self.x.describe)
+        print(self.y.describe)
+
+        self.x = self.x.rename(str,axis="columns") 
+        #self.y = self.y.rename(str,axis="columns") 
+
+        self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(self.x, self.y, test_size=0.2, random_state=42)
+
+        lab_enc = preprocessing.LabelEncoder()
+        #self.x_train = lab_enc.fit_transform(self.x_train)
+        self.y_train = lab_enc.fit_transform(self.y_train)
+
+        # Optimize edilecek hiperparametreleri kullanarak bir study objesi oluşturun
+        study = optuna.create_study(direction='maximize')
+        study.optimize(self.objective, n_trials=100)
+
+        # En iyi parametreleri ve doğruluk değerini alın
+        best_params = study.best_params
+        best_accuracy = study.best_value
+
+        print(f"En iyi parametreler: {best_params}")
+        print(f"En iyi doğruluk değeri: {best_accuracy}")
+
+    def objective(self, trial):
+        n_estimators = trial.suggest_int('n_estimators', 10, 100)
+        max_depth = trial.suggest_int('max_depth', 2, 32, log=True)
+
+        model = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, random_state=42)
+
+        model.fit(self.x_train, self.y_train)
+
+        self.y_pred = model.predict(self.x_test)
+        accuracy = accuracy_score(self.y_test, self.y_pred)
+
+        return accuracy
 
 if __name__ == "__main__":
     tkinterApp(root).pack()
