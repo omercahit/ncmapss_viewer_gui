@@ -14,6 +14,7 @@ from matplotlib import gridspec
 import matplotlib
 import seaborn as sns
 from PIL import Image, ImageTk
+from tkinter import scrolledtext
 import warnings
 warnings.filterwarnings("ignore")
 pd.DataFrame.iteritems = pd.DataFrame.items
@@ -206,7 +207,9 @@ class Page1(tk.Frame):
         df_W = DataFrame(data=W, columns=W_var)
         df_T = DataFrame(data=T, columns=T_var)
         df_X_s = DataFrame(data=X_s, columns=X_s_var)
-        df_X_v = DataFrame(data=X_v, columns=X_v_var) 
+        df_X_v = DataFrame(data=X_v, columns=X_v_var)
+
+        df_W['unit'] = df_A['unit'].values
 
 class Page2(tk.Frame):
     def __init__(self, parent, controller):
@@ -248,13 +251,12 @@ class Page2(tk.Frame):
         self.eof_text.place(x=960, y=800, anchor="n")
 
     def get_A(self):
-        self.df_A = df_A
-        self.info_text.configure(text=(str(self.df_A.describe())+"\n\nEngine units: "+str(np.unique(self.df_A['unit']))))
+        self.info_text.configure(text=(str(df_A.describe())+"\n\nEngine units: "+str(np.unique(df_A['unit']))))
         self.draw_button.configure(state="normal")
         self.eof_button.configure(state="normal")
 
     def draw_Fc(self):
-        df = pd.DataFrame({'Unit # [-]':self.df_A.unit, 'Flight Class # [-]':self.df_A.Fc})
+        df = pd.DataFrame({'Unit # [-]':df_A.unit, 'Flight Class # [-]':df_A.Fc})
 
         fig = Figure(figsize=(5,4), dpi=100)
         ax = fig.add_subplot(111)
@@ -269,8 +271,8 @@ class Page2(tk.Frame):
 
     def get_eof(self):
         text = ""
-        for i in np.unique(self.df_A['unit']):
-            text = text +'Unit: ' + str(i) + ' - Number of flight cycles (t_EOF): '+ str(len(np.unique(self.df_A.loc[self.df_A['unit'] == i, 'cycle']))) + "\n"
+        for i in np.unique(df_A['unit']):
+            text = text +'Unit: ' + str(i) + ' - Number of flight cycles (t_EOF): '+ str(len(np.unique(df_A.loc[df_A['unit'] == i, 'cycle']))) + "\n"
         self.eof_text.configure(text=text)
 
 
@@ -317,16 +319,19 @@ class Page3(tk.Frame):
                                         command=self.plot_hist_unit)
         self.hist_unit_button.place(x=1860, y=460, anchor="ne")
 
+        self.sing_cond_button = tk.Button(self, text="Plot Single\nCondition", fg="black", bg="lightgray",
+                                        font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                        command=self.plot_ft_single)
+        self.sing_cond_button.place(x=1860, y=600, anchor="ne")
+
         self.selected_unit = ""
         self.selected_cycle = ""
-        self.df_W_u = ""
+        self.selected_condition = ""
 
         self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
 
 
     def get_operative(self):
-        self.df_W = df_W
-        self.df_W['unit'] = df_A['unit'].values
         self.units = list(np.unique(df_A['unit']))
         self.units = [int(x) for x in self.units]
         self.units_var = tk.StringVar(value = self.units)
@@ -350,6 +355,7 @@ class Page3(tk.Frame):
         self.plot_fe_button.configure(state="normal")
         self.plot_hist_button.configure(state="normal")
         self.hist_unit_button.configure(state="normal")
+        self.sing_cond_button.configure(state="normal")
 
         self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
                                           font=("Verdana", 24), width=13,
@@ -364,6 +370,22 @@ class Page3(tk.Frame):
         self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
         self.cycles_list.bind('<<ListboxSelect>>', self.on_select_cycle)
 
+        self.conditions = W_var
+        self.conditions_var = tk.StringVar(value = self.conditions)
+        self.conditions_list = tk.Listbox(self, height=6, width=25, listvariable=self.conditions_var, font=("Verdana", 12))
+        self.conditions_list.place(relx=0.15, rely=0.63, anchor="e")
+
+        scroll3 = tk.Scrollbar(self, orient="vertical", command=self.conditions_list.yview)
+        scroll3.place(relx=0.15, rely=0.63, anchor="w", height=120)
+        self.conditions_list['yscrollcommand'] = scroll3.set
+
+        self.choose_condition = tk.Button(self, text="Choose\nCondition",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_condition.place(relx=0.16, rely=0.76, anchor="e")
+
+        self.conditions_list.bind('<<ListboxSelect>>', self.on_select_condition)
+
     def on_select_unit(self, event1):
         if not event1.widget.curselection():
             return
@@ -376,16 +398,37 @@ class Page3(tk.Frame):
         index = self.cycles_list.curselection()[0]
         self.selected_cycle = self.cycles[index]
 
+    def on_select_condition(self, event9):
+        if not event9.widget.curselection():
+            return
+        index = self.conditions_list.curselection()[0]
+        self.selected_condition = self.conditions[index]
+
     def open_selected(self):
         print(self.selected_unit)
         self.plot_ft_button.configure(state="normal")
 
     def plot_ft(self):
-        self.df_W_u = self.df_W.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
-        self.df_W_u.reset_index(inplace=True, drop=True)
+        df_W_u = df_W.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_W_u.reset_index(inplace=True, drop=True)
         labels = ['Altitude [ft]', 'Mach Number [-]', 'Throttle Resolver Angle [%]',
                   'Temperature at fan inlet (T2) [°R]']
-        self.plot_df_color_per_unit(self.df_W_u, W_var, labels)
+        self.plot_df_color_per_unit(df_W_u, W_var, labels)
+
+    def plot_ft_single(self):
+        df_W_single = df_W[self.selected_condition].to_frame()
+        df_W_single["unit"] = df_A["unit"].values
+        df_W_u = df_W_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_W_u.reset_index(inplace=True, drop=True)
+        if self.selected_condition == "alt":
+            labels = ['Altitude [ft]']
+        elif self.selected_condition == "Mach":
+            labels = ['Mach Number [-]']
+        elif self.selected_condition == "TRA":
+            labels = ['Throttle Resolver Angle [%]']
+        elif self.selected_condition == "T2":
+            labels = ['Temperature at fan inlet (T2) [°R]']
+        self.plot_df_color_per_unit(df_W_u, [self.selected_condition], labels)
 
     def plot_df_color_per_unit(self, data, variables, labels, size=10, labelsize=17, option='Time', name=None):
 
@@ -649,6 +692,7 @@ class Page5(tk.Frame):
 
         self.selected_unit = ""
         self.selected_cycle = ""
+        self.selected_sensor = ""
 
         self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
 
@@ -662,10 +706,15 @@ class Page5(tk.Frame):
                                  command=self.plot_single_fc)
         self.plot_single_cycle_button.place(x=1860, y=255, anchor="ne")
 
+        self.plot_single_sensor_button = tk.Button(self, text="Plot Single\nSensor", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                 command=self.plot_single_sensor)
+        self.plot_single_sensor_button.place(x=1860, y=370, anchor="ne")
+
         self.get_correlations_button = tk.Button(self, text="Get Correlations", fg="black", bg="lightgray",
                                  font=("Verdana", 18), pady=10, width=20, state="disabled",
                                  command=self.get_corr)
-        self.get_correlations_button.place(x=1860, y=370, anchor="ne")
+        self.get_correlations_button.place(x=1860, y=485, anchor="ne")
 
     def get_xs(self):
         self.units = list(np.unique(df_A['unit']))
@@ -677,6 +726,13 @@ class Page5(tk.Frame):
         scroll.place(relx=0.15, rely=0.1, anchor="w", height=100)
         self.unit_list['yscrollcommand'] = scroll.set
 
+        self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_unit.place(relx=0.16, rely=0.2, anchor="e")
+
+        self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
+
         self.cycles = list(np.unique(df_A['cycle']))
         self.cycles = [int(x) for x in self.cycles]
         self.cycles_var = tk.StringVar(value = self.cycles)
@@ -687,18 +743,28 @@ class Page5(tk.Frame):
         scroll2.place(relx=0.15, rely=0.35, anchor="w", height=180)
         self.cycles_list['yscrollcommand'] = scroll2.set
 
-        self.choose_unit = tk.Button(self, text="Choose Unit",fg="black", bg="lightgray",
-                                          font=("Verdana", 24), width=13,
-                                          command=self.open_selected)
-        self.choose_unit.place(relx=0.16, rely=0.2, anchor="e")
-
         self.choose_cycle = tk.Button(self, text="Choose Cycle",fg="black", bg="lightgray",
                                           font=("Verdana", 24), width=13,
                                           command=self.open_selected)
         self.choose_cycle.place(relx=0.16, rely=0.48, anchor="e")
 
-        self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
         self.cycles_list.bind('<<ListboxSelect>>', self.on_select_cycle)
+
+        self.sensors = X_s_var
+        self.sensors_var = tk.StringVar(value = self.sensors)
+        self.sensors_list = tk.Listbox(self, height=9, width=25, listvariable=self.sensors_var, font=("Verdana", 12))
+        self.sensors_list.place(relx=0.15, rely=0.63, anchor="e")
+
+        scroll3 = tk.Scrollbar(self, orient="vertical", command=self.sensors_list.yview)
+        scroll3.place(relx=0.15, rely=0.63, anchor="w", height=180)
+        self.sensors_list['yscrollcommand'] = scroll3.set
+
+        self.choose_sensor = tk.Button(self, text="Choose Sensor",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_sensor.place(relx=0.16, rely=0.76, anchor="e")
+
+        self.sensors_list.bind('<<ListboxSelect>>', self.on_select_sensor)
 
     def on_select_unit(self, event2):
         if not event2.widget.curselection():
@@ -712,11 +778,18 @@ class Page5(tk.Frame):
         index = self.cycles_list.curselection()[0]
         self.selected_cycle = self.cycles[index]
 
+    def on_select_sensor(self, event8):
+        if not event8.widget.curselection():
+            return
+        index = self.sensors_list.curselection()[0]
+        self.selected_sensor = self.sensors[index]
+
     def open_selected(self):
         print(self.selected_unit)
         self.plot_single_unit_button.configure(state="normal")
         self.plot_single_cycle_button.configure(state="normal")
         self.get_correlations_button.configure(state="normal")
+        self.plot_single_sensor_button.configure(state="normal")
 
     def plot_single_xs(self):
         df_X_s_u = df_X_s.loc[df_A.unit == self.selected_unit]
@@ -729,6 +802,12 @@ class Page5(tk.Frame):
         df_X_s_u_c.reset_index(inplace=True, drop=True)
         Page4.plot_df_single_color(self, df_X_s_u_c, X_s_var, X_s_var)
 
+    def plot_single_sensor(self):
+        df_X_s_single = df_X_s[self.selected_sensor].to_frame()
+        df_X_s_u_c = df_X_s_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_X_s_u_c.reset_index(inplace=True, drop=True)
+        Page4.plot_df_single_color(self, df_X_s_u_c, [self.selected_sensor], [self.selected_sensor])
+
     def get_corr(self):
         correlation_matrix = df_X_s.corr(method='pearson')
 
@@ -740,24 +819,18 @@ class Page5(tk.Frame):
                 variable2 = correlation_matrix.columns[j]
                 correlation_value = correlation_matrix.iloc[i, j]
 
-                if abs(correlation_value) >= 0.7:
+                if abs(correlation_value) >= 0.75:
                     strongly_correlated_pairs.add((variable1, variable2, correlation_value))
 
-        text = ("Strongly Correlated Pairs:")
+        text = ("Strongly Correlated Pairs (>%75):")
         for pair in strongly_correlated_pairs:
             text = text + "\n" + str(pair[0]) + " and " + str(pair[1]) + " : " + str(pair[2])
-        #text = tk.StringVar(value = text)
 
-        from tkinter import scrolledtext
-
-        self.corr_text = scrolledtext.ScrolledText(self, width=35, font=("Verdana",15),
-                                  bg="lightgray", fg="green", highlightbackground="red",
+        self.corr_text = scrolledtext.ScrolledText(self, width=35, font=("Verdana",10),
+                                  bg="lightgray", fg="green", highlightbackground="darkred",
                                   highlightthickness=2)
         self.corr_text.insert(tk.END, text)
-        self.corr_text.place(relx=0.17, rely=0.5, anchor="ne")
-        #self.scroll_corr = tk.Scrollbar(self, orient='vertical', command=self.corr_text.xview)
-        #self.corr_text.configure(xscrollcommand = self.scroll_corr.set)
-        #self.scroll_corr.place(relx=0.17, rely=0.5, anchor="nw")
+        self.corr_text.place(relx=0.97, rely=0.45, anchor="ne")
 
         fig = plt.figure(figsize=(10,10))
         sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f")
@@ -805,13 +878,19 @@ class Page6(tk.Frame):
 
         self.selected_unit = ""
         self.selected_cycle = ""
+        self.selected_sensor = ""
 
         self.rect = self.canvas.create_rectangle(1840,1080*0.93,1840,1080*0.93, width=11, outline="darkred")
 
+        self.plot_single_sensor_button = tk.Button(self, text="Plot Single\nSensor", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=20, state="disabled",
+                                 command=self.plot_single_sensor)
+        self.plot_single_sensor_button.place(x=1860, y=370, anchor="ne")
+
         self.get_correlations_button = tk.Button(self, text="Get Correlations", fg="black", bg="lightgray",
                                  font=("Verdana", 18), pady=10, width=20, state="disabled",
-                                 command=self.plot_xv_single)
-        self.get_correlations_button.place(x=1860, y=370, anchor="ne")
+                                 command=self.get_corr)
+        self.get_correlations_button.place(x=1860, y=485, anchor="ne")
 
     def get_xv(self):
         self.units = list(np.unique(df_A['unit']))
@@ -846,6 +925,22 @@ class Page6(tk.Frame):
         self.unit_list.bind('<<ListboxSelect>>', self.on_select_unit)
         self.cycles_list.bind('<<ListboxSelect>>', self.on_select_cycle)
 
+        self.sensors = X_v_var
+        self.sensors_var = tk.StringVar(value = self.sensors)
+        self.sensors_list = tk.Listbox(self, height=9, width=25, listvariable=self.sensors_var, font=("Verdana", 12))
+        self.sensors_list.place(relx=0.15, rely=0.63, anchor="e")
+
+        scroll3 = tk.Scrollbar(self, orient="vertical", command=self.sensors_list.yview)
+        scroll3.place(relx=0.15, rely=0.63, anchor="w", height=180)
+        self.sensors_list['yscrollcommand'] = scroll3.set
+
+        self.choose_sensor = tk.Button(self, text="Choose Sensor",fg="black", bg="lightgray",
+                                          font=("Verdana", 24), width=13,
+                                          command=self.open_selected)
+        self.choose_sensor.place(relx=0.16, rely=0.76, anchor="e")
+
+        self.sensors_list.bind('<<ListboxSelect>>', self.on_select_sensor)
+
     def on_select_unit(self, event3):
         if not event3.widget.curselection():
             return
@@ -858,10 +953,18 @@ class Page6(tk.Frame):
         index = self.cycles_list.curselection()[0]
         self.selected_cycle = self.cycles[index]
 
+    def on_select_sensor(self, event7):
+        if not event7.widget.curselection():
+            return
+        index = self.sensors_list.curselection()[0]
+        self.selected_sensor = self.sensors[index]
+
     def open_selected(self):
         print(self.selected_unit)
         self.plot_xv_button.configure(state="normal")
         self.plot_xv_single_button.configure(state="normal")
+        self.plot_single_sensor_button.configure(state="normal")
+        self.get_correlations_button.configure(state="normal")
 
     def plot_xv(self):
         df_X_v_u_c = df_X_v.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == 1)]
@@ -872,6 +975,47 @@ class Page6(tk.Frame):
         df_X_v_u_c = df_X_v.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
         df_X_v_u_c.reset_index(inplace=True, drop=True)
         Page4.plot_df_single_color(self,df_X_v_u_c, X_v_var, X_v_var)
+
+    def plot_single_sensor(self):
+        df_X_v_single = df_X_v[self.selected_sensor].to_frame()
+        df_X_v_u_c = df_X_v_single.loc[(df_A.unit == self.selected_unit) & (df_A.cycle == self.selected_cycle)]
+        df_X_v_u_c.reset_index(inplace=True, drop=True)
+        Page4.plot_df_single_color(self, df_X_v_u_c, [self.selected_sensor], [self.selected_sensor])
+
+    def get_corr(self):
+        correlation_matrix = df_X_v.corr(method='pearson')
+
+        strongly_correlated_pairs = set()
+
+        for i in range(len(correlation_matrix.columns)):
+            for j in range(i + 1, len(correlation_matrix.columns)):
+                variable1 = correlation_matrix.columns[i]
+                variable2 = correlation_matrix.columns[j]
+                correlation_value = correlation_matrix.iloc[i, j]
+
+                if abs(correlation_value) >= 0.75:
+                    strongly_correlated_pairs.add((variable1, variable2, correlation_value))
+
+        text = ("Strongly Correlated Pairs (>%75):")
+        for pair in strongly_correlated_pairs:
+            text = text + "\n" + str(pair[0]) + " and " + str(pair[1]) + " : " + str(pair[2])
+
+        self.corr_text = scrolledtext.ScrolledText(self, width=35, font=("Verdana",10),
+                                  bg="lightgray", fg="green", highlightbackground="darkred",
+                                  highlightthickness=2)
+        self.corr_text.insert(tk.END, text)
+        self.corr_text.place(relx=0.97, rely=0.45, anchor="ne")
+
+        fig = plt.figure(figsize=(10,10))
+        sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm", fmt=".2f")
+        plt.title("Correlation Matrix")
+        plt.close()
+
+        self.canvas.coords(self.rect, 1920 / 2 - 500, 1080 / 2 - 500, 1920 / 2 + 500, 1080 / 2 + 500)
+
+        self.fig_canvas = FigureCanvasTkAgg(fig, master=self.canvas)
+        self.fig_canvas.draw()
+        self.fig_canvas.get_tk_widget().place(relx=0.5, rely=0.5, anchor="center")
 
 class Page7(tk.Frame):
     def __init__(self, parent, controller):
@@ -900,8 +1044,6 @@ class Page7(tk.Frame):
 
     def plot_hs(self):
         Page3.plot_df_color_per_unit(self, df_A, ['hs'],[r'$h_s$ [-]'], option='cycle', size=8)
-
-
 
 
 if __name__ == "__main__":
