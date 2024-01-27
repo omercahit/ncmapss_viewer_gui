@@ -247,8 +247,8 @@ class Page2(tk.Frame):
                                  command=self.get_A)
         self.button3.place(x=1860, y=25, anchor="ne")
 
-        self.info_text = tk.Label(self, text="", bg="black", fg="white", font=("Verdana", 12))
-        self.info_text.place(x=960, y=20, anchor="n")
+        self.info_text = tk.Label(self, text="", bg="black", fg="black", font=("Verdana", 12), padx=50, pady=50)
+        self.info_text.place(relx=0.5, rely=0.5, anchor="center")
 
         self.draw_button = tk.Button(self, text="Plot Flight Classes", fg="black", bg="lightgray",
                                  font=("Verdana", 18), pady=10, width=20, state="disabled",
@@ -260,23 +260,21 @@ class Page2(tk.Frame):
                                  command=self.get_eof)
         self.eof_button.place(x=1860, y=230, anchor="ne")
 
-        self.eof_text = tk.Label(self, text="", bg="black", fg="white", font=("Verdana", 12))
-        self.eof_text.place(x=960, y=800, anchor="n")
-
     def get_A(self):
-        self.info_text.configure(text=(str(df_A.describe())+"\n\nEngine units: "+str(np.unique(df_A['unit']))))
+        self.info_text.configure(text=(str(df_A.describe())+"\n\nEngine units: "+str(np.unique(df_A['unit']))), bg="white")
         self.draw_button.configure(state="normal")
         self.eof_button.configure(state="normal")
 
     def draw_Fc(self):
+        self.info_text.destroy()
         df = pd.DataFrame({'Unit # [-]':df_A.unit, 'Flight Class # [-]':df_A.Fc})
 
-        fig = Figure(figsize=(5,4), dpi=100)
+        fig = Figure(figsize=(10,10), dpi=100)
         ax = fig.add_subplot(111)
 
         df.plot(x='Unit # [-]', y='Flight Class # [-]', ax=ax, kind="scatter")
 
-        self.canvas.create_rectangle(1920/2-250,1080/2-200,1920/2+250,1080/2+200, width=9, outline="darkred")
+        self.canvas.create_rectangle(1920/2-500,1080/2-500,1920/2+500,1080/2+500, width=9, outline="darkred")
 
         canvas = FigureCanvasTkAgg(fig, master=self.canvas)
         canvas.draw()
@@ -286,7 +284,7 @@ class Page2(tk.Frame):
         text = ""
         for i in np.unique(df_A['unit']):
             text = text +'Unit: ' + str(i) + ' - Number of flight cycles (t_EOF): '+ str(len(np.unique(df_A.loc[df_A['unit'] == i, 'cycle']))) + "\n"
-        self.eof_text.configure(text=text)
+        self.info_text.configure(text=text)
 
 
 class Page3(tk.Frame):
@@ -703,9 +701,8 @@ class Page4(tk.Frame):
                                  command=self.get_degradation)
         self.button3.place(x=1860, y=25, anchor="ne")
 
-        self.info_text = tk.Label(self, text="", bg="black", fg="white", font=("Verdana", 12),
-                                  wraplength=350)
-        self.info_text.place(x=20, y=540, anchor="w")
+        self.info_text = tk.Label(self, text="", bg="black", fg="white", font=("Verdana", 12))
+        self.info_text.place(relx=0.5, rely=0.5, anchor="center")
 
         self.plot_parallel_button = tk.Button(self, text="Plot as Parallel\nCoordinates", fg="black", bg="lightgray",
                                  font=("Verdana", 18), pady=10, width=20,
@@ -739,6 +736,7 @@ class Page4(tk.Frame):
         self.get_corr_button.configure(state="normal")
 
     def plot_parallel_coordinates(self):
+        self.info_text.destroy()
         import plotly.express as px
 
         varsel = ['unit', 'HPT_eff_mod', 'LPT_eff_mod', 'LPT_flow_mod']
@@ -1352,10 +1350,15 @@ class Page8(tk.Frame):
         self.selected_unit = ""
         self.selected_feat = ""
 
-        self.run_button = tk.Button(self, text="Train", fg="black", bg="lightgray",
+        self.optimize_button = tk.Button(self, text="Optimize", fg="black", bg="lightgray",
+                                 font=("Verdana", 18), pady=10, width=18,
+                                 command=self.optimize)
+        self.optimize_button.place(x=1860, y=115, anchor="ne")
+
+        self.train_button = tk.Button(self, text="Train", fg="black", bg="lightgray",
                                  font=("Verdana", 18), pady=10, width=18,
                                  command=self.train)
-        self.run_button.place(x=1860, y=115, anchor="ne")
+        self.train_button.place(x=1860, y=205, anchor="ne")
         
     def get_concat(self):
         self.df_W = DataFrame(data=W, columns=W_var)
@@ -1367,8 +1370,10 @@ class Page8(tk.Frame):
 
         self.df_all = pd.concat([self.df_W, self.df_X_s, self.df_X_v,
                                  self.df_T, self.df_Y, self.df_A], axis=1)
+        
+        #self.df_all = self.df_all.loc[0:10000]
 
-        self.units = list(np.unique(df_A['unit']))
+        self.units = list(np.unique(self.df_all['unit']))
         self.units_var = tk.StringVar(value = self.units)
         self.unit_list = tk.Listbox(self, height=5, width=25, listvariable=self.units_var, font=("Verdana", 12))
         self.unit_list.place(relx=0.15, rely=0.1, anchor="e")
@@ -1417,7 +1422,7 @@ class Page8(tk.Frame):
         index = self.features_list.curselection()[0]
         self.selected_feat = self.features[index]
 
-    def train(self):
+    def optimize(self):
         self.x = self.single_unit.drop(self.selected_feat, axis=1)
         self.y = self.single_unit[self.selected_feat].to_frame()
 
@@ -1430,19 +1435,16 @@ class Page8(tk.Frame):
         self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(self.x, self.y, test_size=0.2, random_state=42)
 
         lab_enc = preprocessing.LabelEncoder()
-        #self.x_train = lab_enc.fit_transform(self.x_train)
         self.y_train = lab_enc.fit_transform(self.y_train)
 
-        # Optimize edilecek hiperparametreleri kullanarak bir study objesi oluşturun
         study = optuna.create_study(direction='maximize')
         study.optimize(self.objective, n_trials=100)
 
-        # En iyi parametreleri ve doğruluk değerini alın
         best_params = study.best_params
         best_accuracy = study.best_value
 
-        print(f"En iyi parametreler: {best_params}")
-        print(f"En iyi doğruluk değeri: {best_accuracy}")
+        print(f"Best parameters: {best_params}")
+        print(f"Best accuracy: {best_accuracy}")
 
     def objective(self, trial):
         n_estimators = trial.suggest_int('n_estimators', 10, 100)
@@ -1456,6 +1458,28 @@ class Page8(tk.Frame):
         accuracy = accuracy_score(self.y_test, self.y_pred)
 
         return accuracy
+    
+    def train(self):
+        self.x = self.single_unit.drop(self.selected_feat, axis=1)
+        self.y = self.single_unit[self.selected_feat].to_frame()
+
+        print(self.x.describe)
+        print(self.y.describe)
+
+        self.x = self.x.rename(str,axis="columns") 
+
+        self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(self.x, self.y, test_size=0.2, random_state=42)
+
+        lab_enc = preprocessing.LabelEncoder()
+        self.y_train = lab_enc.fit_transform(self.y_train)
+
+        model = RandomForestClassifier(n_estimators=51, max_depth=3, random_state=42)
+
+        model.fit(self.x_train, self.y_train)
+
+        self.y_pred = model.predict(self.x_test)
+        accuracy = accuracy_score(self.y_test, self.y_pred)
+        print(accuracy)
 
 if __name__ == "__main__":
     tkinterApp(root).pack()
